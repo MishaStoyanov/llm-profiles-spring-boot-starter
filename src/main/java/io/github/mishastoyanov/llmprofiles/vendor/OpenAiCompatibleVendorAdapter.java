@@ -4,7 +4,6 @@ import com.openai.client.okhttp.OpenAIOkHttpClient;
 import com.openai.client.okhttp.OpenAIOkHttpClientAsync;
 import io.github.mishastoyanov.llmprofiles.LlmProperties;
 import org.springframework.ai.chat.model.ChatModel;
-import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.util.StringUtils;
@@ -25,7 +24,7 @@ public class OpenAiCompatibleVendorAdapter implements LlmVendorAdapter {
      * some value here. Both clients are given for the reason on {@link AnthropicVendorAdapter}.
      */
     @Override
-    public ChatModel chatModel(String vendorName, LlmProperties.Vendor vendor) {
+    public LlmVendor connect(String vendorName, LlmProperties.Vendor vendor) {
         if (!StringUtils.hasText(vendor.apiKey())) {
             throw new IllegalArgumentException("api-key is required for type openai-compatible"
                     + " (any non-empty value for a server that does not check it)");
@@ -36,14 +35,10 @@ public class OpenAiCompatibleVendorAdapter implements LlmVendorAdapter {
             sync.baseUrl(vendor.baseUrl());
             async.baseUrl(vendor.baseUrl());
         }
-        return OpenAiChatModel.builder()
+        ChatModel model = OpenAiChatModel.builder()
                 .openAiClient(sync.build())
                 .openAiClientAsync(async.build())
                 .build();
-    }
-
-    @Override
-    public ChatOptions.Builder<?> options() {
-        return OpenAiChatOptions.builder();
+        return new SpringAiVendor(model, OpenAiChatOptions::builder);
     }
 }

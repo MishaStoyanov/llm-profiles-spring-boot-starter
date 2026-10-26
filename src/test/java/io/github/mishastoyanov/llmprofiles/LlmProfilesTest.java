@@ -172,6 +172,7 @@ class LlmProfilesTest {
     void everyConfigurationProblemIsReportedAtOnce() {
         runner.withPropertyValues(
                         "llm.vendors.n8n.type=webhook",
+                        "llm.vendors.mystery.type=carrier-pigeon",
                         "llm.vendors.untyped.base-url=http://nowhere",
                         "llm.profiles.orphan.vendor=missing",
                         "llm.profiles.orphan.model=x",
@@ -180,7 +181,8 @@ class LlmProfilesTest {
                         "llm.profiles.local_draft.model=x")
                 .run(context -> assertThat(context).getFailure().rootCause()
                         .isInstanceOf(LlmProfilesConfigurationException.class)
-                        .hasMessageContaining("vendor 'n8n': no adapter for type 'webhook'")
+                        .hasMessageContaining("vendor 'n8n': base-url is required for type webhook")
+                        .hasMessageContaining("vendor 'mystery': no adapter for type 'carrier-pigeon'")
                         .hasMessageContaining("vendor 'untyped': type is not set")
                         .hasMessageContaining("profile 'orphan': vendor 'missing' is not declared under llm.vendors")
                         .hasMessageContaining("profile 'modelless': model is not set")

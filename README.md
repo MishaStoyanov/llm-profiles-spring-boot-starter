@@ -1,7 +1,7 @@
 # llm-profiles-spring-boot-starter
 
 > **Status: 0.1 in progress.** Profiles, injection and the `anthropic`,
-> `openai-compatible` and `ollama` vendors work; `webhook` and streaming do
+> `openai-compatible`, `ollama` and `webhook` vendors work; streaming does
 > not yet. Sections marked *(target)* describe what the code is being written
 > towards. The name is a working one.
 
@@ -58,7 +58,7 @@ llm:
     triage:
       vendor: n8n
       path: /webhook/triage
-      request: '{"prompt": "{{prompt}}"}'
+      request: '{"prompt": {{prompt}}}'
       response:
         text: $.output
         input-tokens: $.usage.input
@@ -149,7 +149,44 @@ Vendor modules are optional. Add the ones for the vendor types you use:
 | `openai-compatible` | `spring-ai-openai`, `com.openai:openai-java-client-okhttp`     |
 | `ollama`            | `spring-ai-ollama`                                             |
 
-A vendor type of your own is a bean implementing `LlmVendorAdapter`.
+`webhook` needs nothing extra. A vendor type of your own is a bean
+implementing `LlmVendorAdapter`.
+
+### Webhooks
+
+A `webhook` profile POSTs a JSON body to `base-url` + `path` and reads the
+answer back, so an n8n workflow is called exactly like a model.
+
+```yaml
+triage:
+  vendor: n8n
+  path: /webhook/triage
+  request: '{"prompt": {{prompt}}, "source": "support"}'
+  response:
+    text: $.output
+    input-tokens: $.usage.input
+    output-tokens: $.usage.output
+```
+
+A placeholder is replaced by a complete JSON value: a string arrives already
+quoted and escaped, a number as a number, an unset value as `null`. That is
+why it is written **without quotes**. A prompt containing quotes or line
+breaks then cannot break the body, which pasting raw text between quotes
+would. Available placeholders: `{{prompt}}`, `{{profile}}`, `{{model}}`,
+`{{temperature}}`, `{{max-tokens}}`.
+
+Response paths take `.names` and `[indexes]`, for example
+`$.choices[0].message.content`. `$` is the whole body, and then a plain-text
+answer is accepted as well. Token paths are optional; without them usage is
+unknown, not zero.
+
+At startup an unknown placeholder, a template that is not valid JSON once
+filled in, or a malformed path stops the application. A call that gets a
+non-2xx status, or an answer without the text, fails with
+`WebhookCallException` quoting the start of the body.
+
+`auth` sends one header with every request. `timeout` defaults to 60 seconds.
+Webhooks are synchronous only.
 
 ### Listening to calls
 
@@ -220,8 +257,11 @@ project extracts that layer into a library. What has to change on the way out:
   declared profile would be handed by Spring to a field of any name.
   Registering beans can still be added later without breaking anyone;
   removing it could not.
+- **Webhook placeholders are JSON values, not text.** `{{prompt}}`, not
+  `"{{prompt}}"`. Unusual, but it is the difference between escaping being
+  the library's job and being every user's. Open to revision once real
+  workflows have used it.
 
 ## Open questions
 
 - final name
-- template syntax for the webhook request body

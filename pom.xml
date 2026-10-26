@@ -56,6 +56,11 @@
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-model</artifactId>
         </dependency>
+        <!-- Already brought in by spring-ai-model; named because the webhook vendor uses it directly. -->
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
 
         <!-- Vendor modules are optional: an application pulls in only the vendors it uses, and the
              adapter for a vendor type switches on when its classes are on the classpath. -->

@@ -4,17 +4,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
+import io.github.mishastoyanov.llmprofiles.vendor.LlmVendor;
 import io.github.mishastoyanov.llmprofiles.vendor.LlmVendorAdapter;
+import io.github.mishastoyanov.llmprofiles.vendor.SpringAiVendor;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
 import org.springframework.ai.chat.metadata.DefaultUsage;
-import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 
-/** Vendor type {@code fake}: answers without a network and remembers what it was asked. */
+/** Vendor type {@code fake}: a Spring AI model that answers without a network and remembers what it was asked. */
 class FakeVendor implements LlmVendorAdapter {
 
     final List<Prompt> prompts = new ArrayList<>();
@@ -29,23 +31,18 @@ class FakeVendor implements LlmVendorAdapter {
     }
 
     @Override
-    public ChatModel chatModel(String vendorName, LlmProperties.Vendor vendor) {
-        return prompt -> {
+    public LlmVendor connect(String vendorName, LlmProperties.Vendor vendor) {
+        return new SpringAiVendor(prompt -> {
             prompts.add(prompt);
             return answer.apply(prompt);
-        };
-    }
-
-    @Override
-    public ChatOptions.Builder<?> options() {
-        return ChatOptions.builder();
+        }, ChatOptions::builder);
     }
 
     Prompt lastPrompt() {
         return prompts.getLast();
     }
 
-    static ChatResponse response(String text, String model, org.springframework.ai.chat.metadata.Usage usage) {
+    static ChatResponse response(String text, String model, Usage usage) {
         return new ChatResponse(
                 List.of(new Generation(new AssistantMessage(text))),
                 ChatResponseMetadata.builder().model(model).usage(usage).build());

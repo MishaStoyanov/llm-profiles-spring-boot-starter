@@ -15,18 +15,15 @@ import io.github.mishastoyanov.llmprofiles.LlmProfiles;
 import io.github.mishastoyanov.llmprofiles.LlmProfilesConfigurationException;
 import io.github.mishastoyanov.llmprofiles.LlmProperties;
 import io.github.mishastoyanov.llmprofiles.UnknownProfileException;
+import io.github.mishastoyanov.llmprofiles.vendor.LlmVendor;
 import io.github.mishastoyanov.llmprofiles.vendor.LlmVendorAdapter;
-import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.util.StringUtils;
 
 /**
- * Builds one {@link ChatModel} per vendor and one client per profile, all at startup, so a broken
+ * Connects every vendor once and builds one client per profile, all at startup, so a broken
  * configuration stops the application instead of the first request that happens to need it.
  */
 public final class DefaultLlmProfiles implements LlmProfiles {
-
-    private record Vendor(LlmVendorAdapter adapter, ChatModel chatModel) {
-    }
 
     private final Map<String, LlmClient> clients;
     private final Set<String> names;
@@ -35,7 +32,7 @@ public final class DefaultLlmProfiles implements LlmProfiles {
         List<String> problems = new ArrayList<>();
         Map<String, LlmVendorAdapter> adaptersByType = indexByType(adapters, problems);
 
-        Map<String, Vendor> vendors = new LinkedHashMap<>();
+        Map<String, LlmVendor> vendors = new LinkedHashMap<>();
         properties.vendors().forEach((name, vendor) -> {
             String type = vendor.type() == null ? null : vendor.type().toLowerCase(Locale.ROOT);
             if (!StringUtils.hasText(type)) {
@@ -50,7 +47,7 @@ public final class DefaultLlmProfiles implements LlmProfiles {
                 return;
             }
             try {
-                vendors.put(name, new Vendor(adapter, adapter.chatModel(name, vendor)));
+                vendors.put(name, adapter.connect(name, vendor));
             } catch (RuntimeException e) {
                 problems.add("vendor '" + name + "': " + e.getMessage());
             }
@@ -75,15 +72,16 @@ public final class DefaultLlmProfiles implements LlmProfiles {
                         + "' is not declared under llm.vendors. Declared: " + properties.vendors().keySet());
                 return;
             }
-            if (!StringUtils.hasText(profile.model())) {
-                problems.add("profile '" + name + "': model is not set");
-                return;
-            }
-            Vendor vendor = vendors.get(profile.vendor());
+            LlmVendor vendor = vendors.get(profile.vendor());
             if (vendor == null) {
                 return; // the vendor's own problem is already on the list
             }
-            clients.put(ProfileNames.canonical(name), new DefaultLlmClient(name, profile.vendor(), vendor.chatModel(), vendor.adapter(),
+            List<String> profileProblems = vendor.check(profile);
+            if (!profileProblems.isEmpty()) {
+                profileProblems.forEach(problem -> problems.add("profile '" + name + "': " + problem));
+                return;
+            }
+            clients.put(ProfileNames.canonical(name), new DefaultLlmClient(name, profile.vendor(), vendor, profile,
                     profile.model(), profile.temperature(), profile.maxTokens(), fixedListeners));
         });
 
