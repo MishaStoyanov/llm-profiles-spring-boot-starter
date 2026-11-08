@@ -19,6 +19,8 @@ import io.github.mishastoyanov.llmprofiles.autoconfigure.LlmProfilesAutoConfigur
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import tools.jackson.databind.JsonNode;
@@ -85,6 +87,24 @@ class WebhookVendorTest {
             assertThat(headers.getFirst().getFirst("X-Api-Key")).isEqualTo("secret");
             assertThat(headers.getFirst().getFirst("Content-Type")).isEqualTo("application/json");
         });
+    }
+
+    @Test
+    void aWebhookServesAsAChatModelToo() {
+        runner.run(context -> {
+            ChatResponse response = context.getBean(LlmProfiles.class).profile("triage").asChatModel()
+                    .call(new Prompt("ticket #2"));
+
+            assertThat(response.getResult().getOutput().getText()).isEqualTo("done");
+            assertThat(response.getMetadata().getUsage().getTotalTokens()).isEqualTo(9);
+            assertThat(JsonMapper.shared().readTree(bodies.getFirst()).path("prompt").stringValue()).isEqualTo("ticket #2");
+        });
+    }
+
+    @Test
+    void retriesAreRefusedForAWebhook() {
+        runner.withPropertyValues("llm.vendors.n8n.max-retries=2").run(context -> assertThat(context).getFailure()
+                .hasMessageContaining("vendor 'n8n': max-retries does not apply to a webhook"));
     }
 
     @Test

@@ -71,7 +71,7 @@ final class WebhookVendor implements LlmVendor {
     public VendorReply call(VendorRequest request) {
         Compiled profile = compiled.computeIfAbsent(request.settings(), this::compile);
         String body = profile.request().render(new RequestTemplate.Values(
-                request.prompt(), request.profile(), request.model(), request.temperature(), request.maxTokens()));
+                request.text(), request.profile(), request.model(), request.temperature(), request.maxTokens()));
 
         HttpRequest.Builder http = HttpRequest.newBuilder(profile.uri())
                 .timeout(timeout)

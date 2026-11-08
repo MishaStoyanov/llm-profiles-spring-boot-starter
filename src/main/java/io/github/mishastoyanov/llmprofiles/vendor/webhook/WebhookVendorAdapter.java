@@ -41,6 +41,10 @@ public class WebhookVendorAdapter implements LlmVendorAdapter {
         if (auth != null && (!StringUtils.hasText(auth.header()) || !StringUtils.hasText(auth.value()))) {
             throw new IllegalArgumentException("auth needs both header and value");
         }
+        if (vendor.maxRetries() != null) {
+            throw new IllegalArgumentException("max-retries does not apply to a webhook: a workflow may have"
+                    + " side effects, so a failed call is never repeated behind its back");
+        }
         Duration timeout = vendor.timeout() != null ? vendor.timeout() : DEFAULT_TIMEOUT;
         HttpClient http = HttpClient.newBuilder().connectTimeout(timeout).build();
         return new WebhookVendor(http, baseUrl, auth, timeout, json);

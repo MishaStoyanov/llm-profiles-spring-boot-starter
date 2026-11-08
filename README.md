@@ -1,9 +1,9 @@
 # llm-profiles-spring-boot-starter
 
-> **Status: 0.1 in progress.** Profiles, injection and the `anthropic`,
-> `openai-compatible`, `ollama` and `webhook` vendors work; streaming does
-> not yet. Sections marked *(target)* describe what the code is being written
-> towards. The name is a working one.
+> **Status: 0.1 and 0.2 feature-complete, not yet released.** Profiles,
+> injection, streaming, the Spring AI bridge, the `anthropic`,
+> `openai-compatible`, `ollama` and `webhook` vendors, prices and the log,
+> Micrometer and JDBC sinks work. The name is a working one.
 
 Named LLM profiles for Spring Boot, declared in YAML and built on top of
 Spring AI.
@@ -20,7 +20,7 @@ through one interface, and every call is accounted for honestly.
 - A workflow behind a webhook (n8n) cannot be used as a model without custom
   code.
 
-## Configuration (target)
+## Configuration
 
 ```yaml
 llm:
@@ -28,6 +28,8 @@ llm:
     anthropic:
       type: anthropic
       api-key: ${ANTHROPIC_API_KEY}
+      timeout: 60s
+      max-retries: 1
     ollama:
       type: ollama
       base-url: http://localhost:11434
@@ -63,10 +65,23 @@ llm:
         text: $.output
         input-tokens: $.usage.input
         output-tokens: $.usage.output
+
+  prices:                       # per vendor, then per model; per million tokens
+    anthropic:
+      claude-haiku-4-5:
+        input-per-million: 1.00
+        output-per-million: 5.00
+
+  accounting:
+    log:
+      enabled: true             # one line per call
+    jdbc:
+      enabled: true             # one row per call, in the application's DataSource
 ```
 
 `vendors` say where and how to connect. `profiles` say which model solves
-which task and with what parameters.
+which task and with what parameters. `prices` say what a model costs, and
+`accounting` where the record of every call goes.
 
 ## Usage
 
@@ -114,7 +129,68 @@ response.vendor();
 response.model();                 // the model the provider says answered
 ```
 
-Overrides return a new client and leave the profile as configured.
+Overrides return a new client and leave the profile as configured. Passing
+`null` removes an override, and the profile's own value applies again.
+
+A client is a handle on its profile, not a copy: every call reads the
+profile's settings as the registry has them at that moment.
+
+### Streaming
+
+```java
+Flux<String> answer = summarizer.stream("Summarise this: " + text);
+```
+
+Nothing is sent until the `Flux` is subscribed to, and every subscription is
+a call of its own. Listeners hear of a stream once, when it completes, fails
+or is cancelled, with the usage the provider reported along the way and the
+time to the first piece of text. A cancelled stream is reported as failed with
+a `CancellationException`: it did not finish, and that is what accounting
+needs to know.
+
+`webhook` profiles do not stream; `stream()` on one throws
+`UnsupportedOperationException` at once.
+
+### Spring AI: `ChatClient`, advisors and the rest
+
+```java
+ChatClient chat = ChatClient.create(reviewer.asChatModel());
+
+chat.prompt().user("Review this diff: ...").call().content();
+```
+
+`asChatModel()` hands the profile to anything in Spring AI that takes a
+`ChatModel`. Calls through it are still calls through the profile: its
+settings and the client's overrides apply, and listeners see them. Options
+sent with a prompt win over the profile's model, temperature and max tokens,
+as Spring AI expects of runtime options; everything else in them, tools
+included, reaches the vendor as it is. The returned model is not a bean, for
+the reason in Decisions.
+
+With tools, `ChatClient` sends the question, runs the tool and sends its
+result back: two round trips to the vendor, two calls through the profile,
+and listeners hear of each with its own usage.
+
+### Timeouts and retries
+
+`timeout` bounds the wait for the vendor: for a call, the whole answer; for a
+stream, each piece of it, the first included, so a long answer that keeps
+coming is not cut off. Each retry waits as long again.
+
+`max-retries` is how often a failed call is tried again. Both are optional and
+default to what the vendor's client does on its own:
+
+| type                | timeout                         | retries                    |
+|---------------------|---------------------------------|----------------------------|
+| `anthropic`         | SDK default (10 minutes)        | 2                          |
+| `openai-compatible` | 60 s per call (Spring AI's)     | 2                          |
+| `ollama`            | none                            | 10, with pauses up to 3 min |
+| `webhook`           | 60 s                            | never                      |
+
+Spring AI's Ollama retries a timed-out call ten times with growing pauses, so
+without `max-retries` a timeout of a few seconds can still take minutes to
+fail. A webhook is never retried: a workflow may have side effects, and
+`max-retries` on one stops the application at startup.
 
 Where the profile is only known at runtime, the registry takes a name:
 
@@ -134,7 +210,8 @@ LlmClient injection does not match llm.profiles (declared: [summarizer, local-dr
 ```
 
 The configuration itself is checked the same way: an unknown vendor type, a
-profile pointing at an undeclared vendor, a missing model or API key.
+profile pointing at an undeclared vendor, a missing model or API key, a
+timeout that is not positive.
 
 Names are read from the compiled class, so the code has to be compiled with
 `-parameters`. Projects built on `spring-boot-starter-parent` already are.
@@ -186,13 +263,110 @@ non-2xx status, or an answer without the text, fails with
 `WebhookCallException` quoting the start of the body.
 
 `auth` sends one header with every request. `timeout` defaults to 60 seconds.
-Webhooks are synchronous only.
+Webhooks are synchronous only, and never retried.
 
-### Listening to calls
+## Accounting
 
-A bean implementing `LlmCallListener` sees every call, successful or not, with
-its profile, vendor, model, latency and usage. A listener that throws is
-logged and does not break the call.
+Every call, successful or not, streamed or not, made directly or through
+`asChatModel()`, becomes one `LlmCallEvent`: profile, vendor, model, when it
+started, latency (and for a stream the time to its first piece of text),
+usage, the price at the time, tags and the error if there was one.
+
+### Prices
+
+```yaml
+llm:
+  prices:
+    anthropic:                  # a vendor name from llm.vendors
+      claude-haiku-4-5:
+        input-per-million: 1.00
+        output-per-million: 5.00
+```
+
+The library ships no price list: one in the repository would be wrong within
+months while still producing confident totals. It knows what it is told.
+
+A price is looked up for the model that answered, then for the one asked for,
+since providers answer with dated names (`claude-haiku-4-5-20251001`) for
+undated ones. A model with no price is *unpriced*: `event.priced()` is false
+and every cost is null, never zero.
+
+Input and output are priced separately: `event.inputCost()` and
+`event.outputCost()` are each known when the provider reported that kind of
+token. `event.cost()` is their sum, and null when either is missing, as after
+a stream cut off before its last piece: half a bill is not a smaller bill, it
+is an unknown one, while the half that is known stays readable. Prices are per vendor, because the same model behind two
+endpoints need not cost the same; the numbers are in whatever currency you
+write them in.
+
+### Tags
+
+Who caused a call, and for which piece of work, is the application's to say:
+
+```java
+summarizer.withTag("user", userId).withTag("job", jobId).chat(prompt);
+```
+
+```yaml
+llm:
+  profiles:
+    summarizer:
+      tags:
+        feature: summaries
+```
+
+A client's tags lie over its profile's. They reach every sink, except metrics:
+values like user ids have no end of distinct values, which a metrics backend
+cannot afford.
+
+### Sinks
+
+A sink is a bean implementing `LlmCallListener`; declare one and it is called
+for every call, on the calling thread, after the call. A listener that throws
+is logged and does not break the call. Three come built in:
+
+| sink       | switch                                  | default |
+|------------|-----------------------------------------|---------|
+| log        | `llm.accounting.log.enabled`            | off     |
+| Micrometer | `llm.accounting.metrics.enabled`        | on, when the application has a `MeterRegistry` |
+| JDBC       | `llm.accounting.jdbc.enabled`           | off     |
+
+**Log.** One line per call on `io.github.mishastoyanov.llmprofiles.calls`,
+INFO for a success and WARN for a failure. What is not known is written as `?`:
+
+```
+profile=summarizer vendor=anthropic model=claude-haiku-4-5-20251001 latency=812ms input=120 output=40 cost=0.00032 (input 0.00012, output 0.0002) tags={job=42}
+profile=summarizer vendor=anthropic model=claude-haiku-4-5 latency=95ms input=120 output=? cost=? (input 0.00012, output ?) failed=CancellationException: ...
+profile=local-draft vendor=ollama model=llama3 latency=2140ms input=? output=? cost=unpriced
+```
+
+**Micrometer.** `llm.calls` (timer; tags `profile`, `vendor`, `model`,
+`outcome` = `success` / `error` / `cancelled`, `priced`), `llm.tokens`
+(counter; plus `type` = `input` / `output`, only counts the provider
+reported) and `llm.cost` (counter; plus `type` = `input` / `output`, each
+only when the model has a price and that kind of token was reported).
+Summing `llm.cost` gives what is known; `llm.calls{priced="false"}` shows
+how much is not.
+
+**JDBC.** One row per call in the application's `DataSource`, table
+`llm_call` (`llm.accounting.jdbc.table` to rename, with a schema if needed).
+The table definition ships at
+`io/github/mishastoyanov/llmprofiles/accounting/llm_call.sql`, written for
+PostgreSQL and H2: copy it into your migrations, or set
+`llm.accounting.jdbc.create-table: true` to try things out. Needs
+`spring-jdbc` on the classpath.
+
+A row stores the rates per million tokens as they were at the time of the
+call, not a total, so that correcting a price tomorrow does not move last
+month's numbers, and a cheap call can be told from a mispriced one:
+
+```sql
+SELECT profile,
+       SUM(input_tokens * input_per_million + output_tokens * output_per_million) / 1e6 AS cost,
+       COUNT(*) FILTER (WHERE input_per_million IS NULL)                                AS unpriced_calls
+FROM llm_call
+GROUP BY profile;
+```
 
 ## Principles
 
@@ -207,20 +381,23 @@ logged and does not break the call.
 
 ## Roadmap
 
-**0.1: base**
+**0.1: base** (done, unreleased)
 - vendors and profiles from YAML
 - vendor types: `anthropic`, `openai-compatible`, `ollama`, `webhook`
   (minimal: request template, response paths, synchronous only)
 - programmatic overrides on top of a profile
 - chat and streaming (no streaming for `webhook`)
+- a profile as a Spring AI `ChatModel`, still accounted for
+- timeouts and retries per vendor
 - every response carries usage, latency, vendor and model
 - a call listener hook, so that 0.2 adds accounting without changing the API
 
-**0.2: accounting**
+**0.2: accounting** (done, unreleased)
 - one event per call and a sink interface
 - sinks: log, Micrometer, JDBC
 - prices in config, cost per call, price recorded as it was at the time of
   the call
+- tags on calls, from the profile and from the caller
 
 **0.3: custom endpoints**
 - richer webhook mapping, shaped by real cases rather than guessed in advance

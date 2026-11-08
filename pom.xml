@@ -96,6 +96,14 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Optional sink: a row per call, switched on by llm.accounting.jdbc.enabled. Micrometer,
+             the other built-in sink, already comes with spring-ai-model. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-jdbc</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-configuration-processor</artifactId>
@@ -105,6 +113,17 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Tests only: a profile used as a ChatModel is checked from inside a real ChatClient. -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-client-chat</artifactId>
             <scope>test</scope>
         </dependency>
         <!-- Tests only: injection is checked against the constructor @RequiredArgsConstructor

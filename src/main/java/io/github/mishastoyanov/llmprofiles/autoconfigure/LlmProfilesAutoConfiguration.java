@@ -17,10 +17,12 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import tools.jackson.databind.json.JsonMapper;
 
 @AutoConfiguration
 @EnableConfigurationProperties(LlmProperties.class)
+@Import(LlmAccountingConfiguration.class)
 public class LlmProfilesAutoConfiguration {
 
     /** Static: a post-processor declared by an instance method would force this class to be built first. */
