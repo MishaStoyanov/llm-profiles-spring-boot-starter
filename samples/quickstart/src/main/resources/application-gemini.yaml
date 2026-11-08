@@ -1,0 +1,14 @@
+# Gemini through its OpenAI-compatible endpoint: the openai-compatible type pointed at a server
+# that is not OpenAI.
+llm:
+  vendors:
+    gemini:
+      type: openai-compatible
+      base-url: https://generativelanguage.googleapis.com/v1beta/openai/
+      api-key: ${GEMINI_API_KEY}
+      timeout: 60s
+  profiles:
+    assistant:
+      vendor: gemini
+      model: ${GEMINI_MODEL:gemini-2.5-flash-lite}
+      max-tokens: 200

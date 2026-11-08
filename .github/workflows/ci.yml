@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      smoke:
+        description: Also call the real vendors whose keys are set as repository secrets
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    name: Build on Java ${{ matrix.java }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The release target, and the newest LTS.
+        java: [21, 25]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+      - name: Build, test, javadoc
+        run: mvn -B -ntp verify
+
+  # Costs money and quota, so it runs only when asked for by hand. A vendor whose secret is not
+  # set is skipped by the tests themselves.
+  smoke:
+    name: Real vendors
+    if: github.event_name == 'workflow_dispatch' && inputs.smoke
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+      - name: Smoke tests
+        run: mvn -B -ntp test -Dtest=RealVendorSmokeTest -Dsurefire.failIfNoSpecifiedTests=false
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

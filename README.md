@@ -1,5 +1,7 @@
 # llm-profiles-spring-boot-starter
 
+[![CI](https://github.com/MishaStoyanov/llm-profiles-spring-boot-starter/actions/workflows/ci.yml/badge.svg)](https://github.com/MishaStoyanov/llm-profiles-spring-boot-starter/actions/workflows/ci.yml)
+
 > **Status: 0.1 and 0.2 feature-complete, not yet released.** Profiles,
 > injection, streaming, the Spring AI bridge, the `anthropic`,
 > `openai-compatible`, `ollama` and `webhook` vendors, prices and the log,
@@ -10,6 +12,9 @@ Spring AI.
 
 Several models of one vendor, several vendors, and n8n workflows are called
 through one interface, and every call is accounted for honestly.
+
+A runnable example is in [`samples/quickstart`](samples/quickstart); what
+changed and when is in the [changelog](CHANGELOG.md).
 
 ## Why
 

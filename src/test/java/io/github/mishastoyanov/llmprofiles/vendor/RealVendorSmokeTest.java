@@ -22,8 +22,9 @@ import static org.assertj.core.api.Assertions.assertThat;
  * environment. Skipped everywhere else, so the build never needs a key or a network.
  * <p>
  * {@code ANTHROPIC_API_KEY}, optionally {@code ANTHROPIC_MODEL}; {@code OPENAI_API_KEY},
- * optionally {@code OPENAI_BASE_URL} and {@code OPENAI_MODEL}; {@code OLLAMA_BASE_URL}, optionally
- * {@code OLLAMA_MODEL}. The models default to small, cheap ones.
+ * optionally {@code OPENAI_BASE_URL} and {@code OPENAI_MODEL}; {@code GEMINI_API_KEY}, optionally
+ * {@code GEMINI_MODEL}; {@code OLLAMA_BASE_URL}, optionally {@code OLLAMA_MODEL}. The models
+ * default to small, cheap ones.
  */
 class RealVendorSmokeTest {
 
@@ -50,6 +51,21 @@ class RealVendorSmokeTest {
             properties.add("llm.vendors.v.base-url=" + System.getenv("OPENAI_BASE_URL"));
         }
         smoke(properties);
+    }
+
+    /**
+     * Gemini through its OpenAI-compatible endpoint: openai-compatible against a server that is not
+     * OpenAI, which is what the type is for. The default model is one that does not think before
+     * answering, since thinking would spend the small token cap on nothing visible.
+     */
+    @Test
+    @EnabledIfEnvironmentVariable(named = "GEMINI_API_KEY", matches = ".+")
+    void geminiAsOpenAiCompatible() {
+        smoke(List.of(
+                "llm.vendors.v.type=openai-compatible",
+                "llm.vendors.v.base-url=" + env("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"),
+                "llm.vendors.v.api-key=" + System.getenv("GEMINI_API_KEY"),
+                "llm.profiles.p.model=" + env("GEMINI_MODEL", "gemini-2.5-flash-lite")));
     }
 
     @Test

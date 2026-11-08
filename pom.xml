@@ -8,6 +8,7 @@
     <version>0.1.0-SNAPSHOT</version>
     <name>llm-profiles-spring-boot-starter</name>
     <description>Named LLM profiles for Spring Boot, declared in YAML and built on top of Spring AI.</description>
+    <url>https://github.com/MishaStoyanov/llm-profiles-spring-boot-starter</url>
 
     <licenses>
         <license>
@@ -15,6 +16,26 @@
             <url>https://www.apache.org/licenses/LICENSE-2.0</url>
         </license>
     </licenses>
+
+    <!-- Maven Central refuses an artifact without developers and scm. -->
+    <developers>
+        <developer>
+            <id>mishastoyanov</id>
+            <name>Misha Stoyanov</name>
+            <url>https://github.com/MishaStoyanov</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <url>https://github.com/MishaStoyanov/llm-profiles-spring-boot-starter</url>
+        <connection>scm:git:https://github.com/MishaStoyanov/llm-profiles-spring-boot-starter.git</connection>
+        <developerConnection>scm:git:git@github.com:MishaStoyanov/llm-profiles-spring-boot-starter.git</developerConnection>
+    </scm>
+
+    <issueManagement>
+        <system>GitHub</system>
+        <url>https://github.com/MishaStoyanov/llm-profiles-spring-boot-starter/issues</url>
+    </issueManagement>
 
     <properties>
         <!-- A library is compiled for the oldest Java its users are likely to run, not the newest
@@ -164,6 +185,78 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.4</version>
             </plugin>
+            <!-- Javadoc runs on every build, not only on release: a doc comment that breaks it is
+                 found the day it is written, not the day of the release. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-javadoc-plugin</artifactId>
+                <version>3.12.0</version>
+                <configuration>
+                    <quiet>true</quiet>
+                    <!-- internal is not API: hidden from the docs as it is from users. -->
+                    <excludePackageNames>io.github.mishastoyanov.llmprofiles.internal</excludePackageNames>
+                    <doclint>all,-missing</doclint>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>attach-javadocs</id>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.4.0</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- mvn -Prelease deploy: signs every artifact and uploads them to Maven Central. Needs a
+             GPG key in the agent and a Central token in settings.xml under the server id below. -->
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.8</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.12.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <publishingServerId>central</publishingServerId>
+                            <!-- Uploaded and validated, then released by hand from the Central
+                                 portal: a release cannot be taken back, so a person presses it. -->
+                            <autoPublish>false</autoPublish>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

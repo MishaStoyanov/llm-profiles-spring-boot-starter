@@ -1,0 +1,11 @@
+spring:
+  main:
+    banner-mode: off
+  # Pick one: ollama, anthropic or gemini.
+  profiles:
+    default: ollama
+
+llm:
+  accounting:
+    log:
+      enabled: true   # a line per call on io.github.mishastoyanov.llmprofiles.calls
