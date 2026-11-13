@@ -5,6 +5,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import javax.sql.DataSource;
 
@@ -298,5 +300,68 @@ class AccountingTest {
     @Test
     void theSchemaShipsWithTheLibrary() {
         assertThat(getClass().getClassLoader().getResource(JdbcCallListener.SCHEMA)).isNotNull();
+    }
+
+    // --- async delivery ------------------------------------------------------------------------
+
+    @Test
+    void asyncListenersRunOffTheCallingThreadAndAreDrainedOnShutdown() {
+        List<String> threads = new CopyOnWriteArrayList<>();
+        CountDownLatch release = new CountDownLatch(1);
+        runner.withPropertyValues("llm.accounting.async.enabled=true")
+                .withBean("slow", LlmCallListener.class, () -> event -> {
+                    threads.add(Thread.currentThread().getName());
+                    awaitQuietly(release);
+                })
+                .run(context -> {
+                    LlmClient summarizer = context.getBean(LlmProfiles.class).profile("summarizer");
+                    summarizer.chat("one");
+                    summarizer.chat("two");
+                    assertThat(events).as("the slow sink holds the queue, the calls did not wait").hasSizeLessThan(2);
+                    release.countDown();
+                });
+        assertThat(events).as("drained when the context closed").hasSize(2);
+        assertThat(threads).containsOnly("llm-accounting");
+    }
+
+    @Test
+    void aFullQueueMakesTheCallDeliverItsOwnEventRatherThanLoseIt() {
+        List<String> threads = new CopyOnWriteArrayList<>();
+        CountDownLatch release = new CountDownLatch(1);
+        runner.withPropertyValues("llm.accounting.async.enabled=true", "llm.accounting.async.queue-capacity=1")
+                .withBean("slow", LlmCallListener.class, () -> event -> {
+                    threads.add(Thread.currentThread().getName());
+                    if (Thread.currentThread().getName().equals("llm-accounting")) {
+                        awaitQuietly(release);
+                    }
+                })
+                .run(context -> {
+                    LlmClient summarizer = context.getBean(LlmProfiles.class).profile("summarizer");
+                    summarizer.chat("one");     // taken by the worker, which then waits
+                    long deadline = System.nanoTime() + 5_000_000_000L;
+                    while (threads.isEmpty() && System.nanoTime() < deadline) {
+                        Thread.onSpinWait();
+                    }
+                    summarizer.chat("two");     // waits in the queue
+                    summarizer.chat("three");   // no room: delivered by the caller
+                    assertThat(threads).contains(Thread.currentThread().getName());
+                    release.countDown();
+                });
+        assertThat(events).hasSize(3);
+    }
+
+    @Test
+    void aQueueWithoutRoomIsAMistake() {
+        runner.withPropertyValues("llm.accounting.async.enabled=true", "llm.accounting.async.queue-capacity=0")
+                .run(context -> assertThat(context).getFailure()
+                        .hasMessageContaining("llm.accounting.async.queue-capacity must be positive"));
+    }
+
+    private static void awaitQuietly(CountDownLatch latch) {
+        try {
+            latch.await(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

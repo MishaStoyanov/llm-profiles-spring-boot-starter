@@ -24,8 +24,8 @@ import tools.jackson.databind.json.JsonMapper;
  * is the cost, and a stored total could not tell a cheap call from a mispriced one. Null rates
  * mean the model was not priced. Null counts mean the provider did not say.
  * <p>
- * The row is written on the calling thread, after the call: a slow database slows calls, a failing
- * one is logged and leaves them alone.
+ * The row is written after the call, on the calling thread unless {@code llm.accounting.async} is
+ * on: a slow database then slows calls. A failing one is logged and leaves them alone.
  */
 public class JdbcCallListener implements LlmCallListener {
 

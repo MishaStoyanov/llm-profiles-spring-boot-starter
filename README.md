@@ -4,8 +4,9 @@
 
 > **Status: 0.1 and 0.2 feature-complete, not yet released.** Profiles,
 > injection, streaming, the Spring AI bridge, the `anthropic`,
-> `openai-compatible`, `ollama` and `webhook` vendors, prices and the log,
-> Micrometer and JDBC sinks work. The name is a working one.
+> `openai-compatible`, `ollama` and `webhook` vendors, prices, the log,
+> Micrometer and JDBC sinks, and profiles changed at runtime from a database
+> work. The name is a working one.
 
 Named LLM profiles for Spring Boot, declared in YAML and built on top of
 Spring AI.
@@ -203,15 +204,27 @@ Where the profile is only known at runtime, the registry takes a name:
 llm.profile(request.profile()).chat(prompt);   // LlmProfiles llm
 ```
 
+Or a name the compiler knows, from an enum:
+
+```java
+enum Profiles implements LlmProfileName { SUMMARIZER, LOCAL_DRAFT }
+
+llm.profile(Profiles.LOCAL_DRAFT).chat(prompt);   // profile local-draft
+```
+
+`LlmProfileName` asks only for `name()`, which every enum already has.
+
 ### Mistakes stop the application at startup
 
-Before any bean is created, every `LlmClient` injection point is checked
+Before any bean is created, every `LlmClient` injection point and every
+constant of an `LlmProfileName` enum in the application's packages is checked
 against `llm.profiles`, and every mismatch is reported in one message,
 including in lazy beans that would otherwise fail only when first used:
 
 ```
-LlmClient injection does not match llm.profiles (declared: [summarizer, local-draft, reviewer]):
+Profile names in code do not match llm.profiles (declared: [summarizer, local-draft, reviewer]):
   - com.example.ReportService(constructor) parameter 'sumarizer': profile 'sumarizer' is not declared
+  - com.example.Profiles.REVEIWER: profile 'REVEIWER' is not declared
 ```
 
 The configuration itself is checked the same way: an unknown vendor type, a
@@ -269,6 +282,72 @@ non-2xx status, or an answer without the text, fails with
 
 `auth` sends one header with every request. `timeout` defaults to 60 seconds.
 Webhooks are synchronous only, and never retried.
+
+## Changing profiles while the application runs
+
+Profiles, vendors and prices can come from somewhere other than YAML, and
+change without a restart: a different model for a task, a new key, a second
+endpoint of a vendor type the application already has.
+
+```yaml
+llm:
+  source:
+    jdbc:
+      enabled: true           # read llm_vendor, llm_profile and llm_price
+    refresh-interval: 1m      # optional; otherwise call LlmProfiles.refresh()
+```
+
+`llm.profiles` is read first, then every source. A vendor, profile or price
+from a source replaces the one of the same name before it **as a whole**: a
+row that sets only the model has no temperature, whatever the YAML said. A
+source can add profiles, but cannot remove one declared before it.
+
+`refresh()` reads everything again and, if the result passes the same checks
+as at startup, switches to it at once. Calls under way finish with what they
+started with; every client, injected ones included, uses the new settings from
+its next call. A vendor whose settings did not change keeps its connection.
+When the new configuration is invalid, `refresh()` throws with every problem
+and nothing changes; the periodic refresh logs it instead, once.
+
+The application's own `llm.*` is bound afresh on each refresh too, so a
+Spring Cloud Config refresh followed by `refresh()` takes effect.
+
+**Names in code stay.** An injection point or an `LlmProfileName` constant is
+checked against `llm.profiles` at startup, before a database can be read, so
+the profile it names has to be declared there; a source may change its
+settings, not remove it. A refresh that would remove one is refused. A profile
+only a source knows is reached by name, `llm.profile("triage")`; once it is
+removed, a call through it fails with `UnknownProfileException`.
+
+What still needs a restart: a new vendor *type*, which needs its adapter on
+the classpath, and anything under `llm.accounting` or `llm.source`.
+
+### From a database
+
+Tables `llm_vendor`, `llm_profile` and `llm_price`
+(`llm.source.jdbc.table-prefix`, `llm_` by default, may carry a schema). The
+definitions ship at `io/github/mishastoyanov/llmprofiles/source/llm_config.sql`
+for PostgreSQL and H2: copy them into your migrations, or set
+`llm.source.jdbc.create-tables: true` to try things out. A row is read the
+way the same keys in YAML are: `timeout` is written `60s`, `tags` is a JSON
+object. Needs `spring-jdbc` on the classpath.
+
+```sql
+INSERT INTO llm_vendor (name, type, api_key) VALUES ('anthropic', 'anthropic', '${ANTHROPIC_API_KEY}');
+UPDATE llm_profile SET model = 'claude-sonnet-5-5' WHERE name = 'reviewer';
+```
+
+**No secrets in the table.** `api_key` and `auth_value` must be a
+placeholder, resolved against the application's environment: an environment
+variable, a system property, or whatever else the environment holds, Vault
+and secret managers included. A key written out in full is refused, and so is
+a placeholder that resolves to nothing.
+
+### A source of your own
+
+A bean implementing `LlmConfigSource` returns `LlmSettings`: vendors,
+profiles and prices. It is read at startup and on every refresh, after YAML
+and the built-in sources, in bean order.
 
 ## Accounting
 
@@ -328,7 +407,13 @@ cannot afford.
 
 A sink is a bean implementing `LlmCallListener`; declare one and it is called
 for every call, on the calling thread, after the call. A listener that throws
-is logged and does not break the call. Three come built in:
+is logged and does not break the call.
+
+With `llm.accounting.async.enabled: true` listeners are called on a thread of
+their own instead, so a slow database does not slow calls. The queue holds
+`llm.accounting.async.queue-capacity` events (10 000); when it is full, the
+call that adds one more delivers it itself rather than lose it. Events still
+waiting at shutdown are delivered, for up to ten seconds. Three come built in:
 
 | sink       | switch                                  | default |
 |------------|-----------------------------------------|---------|
@@ -404,6 +489,12 @@ GROUP BY profile;
   the call
 - tags on calls, from the profile and from the caller
 
+**Runtime configuration** (done, unreleased)
+- vendors, profiles and prices from a database or a source of your own
+- refresh on demand or on a schedule, all or nothing, without a restart
+- profile names as enum constants, checked at startup
+- listeners called off the calling thread, on request
+
 **0.3: custom endpoints**
 - richer webhook mapping, shaped by real cases rather than guessed in advance
 
@@ -439,6 +530,14 @@ project extracts that layer into a library. What has to change on the way out:
   declared profile would be handed by Spring to a field of any name.
   Registering beans can still be added later without breaking anyone;
   removing it could not.
+- **Names in code are declared in YAML.** Injection points and enum
+  constants are checked before any bean exists, when no database can be read
+  yet, and a refresh may not remove what they name. Checking later would let
+  a typo reach production; a profile only a database knows is still reachable
+  by name.
+- **A source replaces whole entries.** Merging field by field would leave no
+  way for a database row to unset a temperature the YAML has, and would make
+  what a profile does depend on two places at once.
 - **Webhook placeholders are JSON values, not text.** `{{prompt}}`, not
   `"{{prompt}}"`. Unusual, but it is the difference between escaping being
   the library's job and being every user's. Open to revision once real

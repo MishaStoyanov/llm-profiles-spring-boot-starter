@@ -12,7 +12,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 /**
  * The {@code llm.*} configuration. Vendors say where and how to connect; profiles say which model
  * solves which task and with what parameters; prices say what a model costs; accounting says where
- * the record of every call goes.
+ * the record of every call goes; sources say where else vendors, profiles and prices are read from.
  *
  * @param prices per vendor name, then per model: what the model costs. A model without an entry
  *               is unpriced, which is reported as such and never as free
@@ -22,12 +22,18 @@ public record LlmProperties(
         Map<String, Vendor> vendors,
         Map<String, Profile> profiles,
         Map<String, Map<String, Price>> prices,
-        @DefaultValue Accounting accounting) {
+        @DefaultValue Accounting accounting,
+        @DefaultValue Source source) {
 
     public LlmProperties {
         vendors = ordered(vendors);
         profiles = ordered(profiles);
         prices = ordered(prices);
+    }
+
+    /** What can change while the application runs. */
+    public LlmSettings settings() {
+        return new LlmSettings(vendors, profiles, prices);
     }
 
     /**
@@ -83,7 +89,19 @@ public record LlmProperties(
     public record Price(BigDecimal inputPerMillion, BigDecimal outputPerMillion) {
     }
 
-    public record Accounting(@DefaultValue Log log, @DefaultValue Metrics metrics, @DefaultValue Jdbc jdbc) {
+    public record Accounting(@DefaultValue Log log, @DefaultValue Metrics metrics, @DefaultValue Jdbc jdbc,
+                             @DefaultValue Async async) {
+    }
+
+    /**
+     * Hands events to listeners on a thread of their own, so that a slow sink does not slow calls.
+     *
+     * @param queueCapacity events waiting for delivery at most; when the queue is full, the call
+     *                      that made one more delivers it itself, so nothing is lost
+     */
+    public record Async(
+            @DefaultValue("false") boolean enabled,
+            @DefaultValue("10000") int queueCapacity) {
     }
 
     /** One line per call on the logger {@code io.github.mishastoyanov.llmprofiles.calls}. */
@@ -105,6 +123,30 @@ public record LlmProperties(
             @DefaultValue("false") boolean enabled,
             @DefaultValue("llm_call") String table,
             @DefaultValue("false") boolean createTable) {
+    }
+
+    /**
+     * Where vendors, profiles and prices are read from besides this configuration; see
+     * {@link LlmConfigSource}.
+     *
+     * @param refreshInterval how often to {@link LlmProfiles#refresh() refresh}; null for never,
+     *                        leaving it to the application
+     */
+    public record Source(Duration refreshInterval, @DefaultValue SourceJdbc jdbc) {
+    }
+
+    /**
+     * Vendors, profiles and prices from database tables; see
+     * {@link io.github.mishastoyanov.llmprofiles.source.JdbcConfigSource}.
+     *
+     * @param tablePrefix  put before {@code vendor}, {@code profile} and {@code price}; may carry
+     *                     a schema, as in {@code config.llm_}
+     * @param createTables runs {@code CREATE TABLE IF NOT EXISTS} at startup, for trying things out
+     */
+    public record SourceJdbc(
+            @DefaultValue("false") boolean enabled,
+            @DefaultValue("llm_") String tablePrefix,
+            @DefaultValue("false") boolean createTables) {
     }
 
     /** Declaration order is kept: it is the order problems and listings are reported in. */

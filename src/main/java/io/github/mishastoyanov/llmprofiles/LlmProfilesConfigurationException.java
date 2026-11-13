@@ -9,6 +9,10 @@ public class LlmProfilesConfigurationException extends IllegalStateException {
         super(message);
     }
 
+    public LlmProfilesConfigurationException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
     /** All problems at once, so fixing the configuration takes one restart rather than one per mistake. */
     public static LlmProfilesConfigurationException of(String heading, List<String> problems) {
         StringBuilder message = new StringBuilder(heading);

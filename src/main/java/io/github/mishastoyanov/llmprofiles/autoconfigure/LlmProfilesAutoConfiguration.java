@@ -1,9 +1,16 @@
 package io.github.mishastoyanov.llmprofiles.autoconfigure;
 
+import java.time.Clock;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+
 import io.github.mishastoyanov.llmprofiles.LlmCallListener;
+import io.github.mishastoyanov.llmprofiles.LlmConfigSource;
 import io.github.mishastoyanov.llmprofiles.LlmProfiles;
 import io.github.mishastoyanov.llmprofiles.LlmProperties;
 import io.github.mishastoyanov.llmprofiles.internal.DefaultLlmProfiles;
+import io.github.mishastoyanov.llmprofiles.internal.EnvironmentConfigSource;
 import io.github.mishastoyanov.llmprofiles.internal.LlmProfileInjection;
 import io.github.mishastoyanov.llmprofiles.vendor.AnthropicVendorAdapter;
 import io.github.mishastoyanov.llmprofiles.vendor.LlmVendorAdapter;
@@ -18,11 +25,12 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.core.env.Environment;
 import tools.jackson.databind.json.JsonMapper;
 
 @AutoConfiguration
 @EnableConfigurationProperties(LlmProperties.class)
-@Import(LlmAccountingConfiguration.class)
+@Import({LlmAccountingConfiguration.class, LlmSourceConfiguration.class})
 public class LlmProfilesAutoConfiguration {
 
     /** Static: a post-processor declared by an instance method would force this class to be built first. */
@@ -31,12 +39,26 @@ public class LlmProfilesAutoConfiguration {
         return new LlmProfileInjection();
     }
 
+    /** The application's own configuration first, then every source the application declares, in order. */
     @Bean
     @ConditionalOnMissingBean
     LlmProfiles llmProfiles(LlmProperties properties,
+                            Environment environment,
+                            ObjectProvider<LlmConfigSource> sources,
                             ObjectProvider<LlmVendorAdapter> adapters,
-                            ObjectProvider<LlmCallListener> listeners) {
-        return new DefaultLlmProfiles(properties, adapters.orderedStream().toList(), listeners.orderedStream().toList());
+                            ObjectProvider<LlmCallListener> listeners,
+                            ObjectProvider<LlmProfileInjection> injection) {
+        List<LlmConfigSource> layers = new ArrayList<>();
+        layers.add(new EnvironmentConfigSource(environment));
+        sources.orderedStream().forEach(layers::add);
+        LlmProfileInjection check = injection.getIfAvailable();
+        DefaultLlmProfiles profiles = new DefaultLlmProfiles(layers, adapters.orderedStream().toList(),
+                listeners.orderedStream().toList(), check == null ? Set.of() : check.namesInCode(),
+                properties.accounting().async(), Clock.systemUTC());
+        if (properties.source().refreshInterval() != null) {
+            profiles.refreshEvery(properties.source().refreshInterval());
+        }
+        return profiles;
     }
 
     // Conditions name classes as strings: a class literal for a vendor that is not on the

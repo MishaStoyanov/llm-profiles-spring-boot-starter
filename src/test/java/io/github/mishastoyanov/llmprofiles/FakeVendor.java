@@ -24,6 +24,9 @@ class FakeVendor implements LlmVendorAdapter {
 
     final List<Prompt> prompts = new ArrayList<>();
 
+    /** Vendor names in the order they were connected, once per connection. */
+    final List<String> connected = new ArrayList<>();
+
     /** Replaced by a test that needs a different answer, or a failure. */
     Function<Prompt, ChatResponse> answer = prompt -> response(
             "echo: " + prompt.getContents(), prompt.getOptions().getModel() + "-2026", new DefaultUsage(12, 3));
@@ -41,6 +44,7 @@ class FakeVendor implements LlmVendorAdapter {
 
     @Override
     public LlmVendor connect(String vendorName, LlmProperties.Vendor vendor) {
+        connected.add(vendorName);
         return new SpringAiVendor(new ChatModel() {
             @Override
             public ChatResponse call(Prompt prompt) {

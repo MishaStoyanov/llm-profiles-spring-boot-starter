@@ -23,6 +23,17 @@ Nothing has been released yet. What the first release will contain:
 - `asChatModel()`: a profile as a Spring AI `ChatModel` for `ChatClient`,
   advisors and tool calling, with every call still accounted for.
 
+### Runtime configuration
+- `LlmConfigSource`: vendors, profiles and prices from sources besides YAML,
+  each entry replacing the one of the same name whole.
+- `llm.source.jdbc`: a source reading `llm_vendor`, `llm_profile` and
+  `llm_price`; keys are stored as placeholders, never in full.
+- `LlmProfiles.refresh()` and `llm.source.refresh-interval`: the new
+  configuration is checked as at startup and takes effect at once, or not at
+  all; unchanged vendors keep their connection.
+- Profiles named in code cannot be removed by a refresh.
+- `LlmProfileName`: profile names as enum constants, checked at startup.
+
 ### Vendors
 - `anthropic`, `openai-compatible`, `ollama` over Spring AI 2.0, and
   `webhook` for workflows such as n8n, with a JSON request template and
@@ -41,5 +52,7 @@ Nothing has been released yet. What the first release will contain:
 - Built-in sinks: a log line per call, Micrometer meters (`llm.calls`,
   `llm.tokens`, `llm.cost`) and a JDBC row per call with the rates of the
   time; the table definition ships with the library.
+- `llm.accounting.async`: listeners on a thread of their own, with a bounded
+  queue that never drops an event.
 
 [Unreleased]: https://github.com/MishaStoyanov/llm-profiles-spring-boot-starter/commits/master
