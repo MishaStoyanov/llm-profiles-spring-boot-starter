@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!-- An application, so unlike the library it may inherit Boot's parent. Not part of the
+         library's build and never published: build the library with `mvn install` first. -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.1</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>io.github.mishastoyanov.samples</groupId>
+    <artifactId>llm-profiles-n8n</artifactId>
+    <version>0.0.0</version>
+
+    <properties>
+        <java.version>21</java.version>
+        <llm-profiles.version>0.1.0-SNAPSHOT</llm-profiles.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+        <!-- The webhook vendor needs nothing else: no Spring AI vendor module. -->
+        <dependency>
+            <groupId>io.github.mishastoyanov</groupId>
+            <artifactId>llm-profiles-spring-boot-starter</artifactId>
+            <version>${llm-profiles.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

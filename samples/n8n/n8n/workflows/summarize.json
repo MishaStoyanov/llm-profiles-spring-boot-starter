@@ -1,0 +1,144 @@
+{
+  "id": "llmprofSummary01",
+  "name": "Summarise a web page",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "summarize",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "6f1c2b0e-7a51-4d0c-9b7e-1a2f3c4d5e02",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "llmprofDemoKey01",
+          "name": "Demo webhook key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.body.url }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "name": "Fetch page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Webhook').first().json.body;\n\nconst options = {};\nif (body.temperature != null) options.temperature = body.temperature;\nif (body.max_tokens != null) options.num_predict = body.max_tokens;\nconst model = body.model || $env.OLLAMA_MODEL || 'llama3.1';\n\nconst html = String($input.first().json.data ?? '');\nconst text = html\n  .replace(/<(script|style|noscript|svg)[\\s\\S]*?<\\/\\1>/gi, ' ')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .slice(0, 12000);\n\nreturn [{ json: {\n  model, stream: false, options,\n  messages: [\n    { role: 'system', content: 'Summarise the web page for a busy engineer: what it is, then the three'\n        + ' most useful points as a list. Plain text, no preamble.' },\n    { role: 'user', content: 'Page ' + body.url + ':\\n\\n' + text },\n  ],\n} }];\n"
+      },
+      "name": "Page to text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.OLLAMA_URL }}/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 170000
+        }
+      },
+      "name": "Ask Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ output: $json.message.content, model: $json.model, usage: { input: $json.prompt_eval_count, output: $json.eval_count } }) }}",
+        "options": {}
+      },
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch page": {
+      "main": [
+        [
+          {
+            "node": "Page to text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Page to text": {
+      "main": [
+        [
+          {
+            "node": "Ask Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask Ollama": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

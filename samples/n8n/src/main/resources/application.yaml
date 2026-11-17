@@ -1,0 +1,42 @@
+spring:
+  main:
+    banner-mode: off
+
+llm:
+  vendors:
+    n8n:
+      type: webhook
+      base-url: ${N8N_URL:http://localhost:5678}
+      auth:
+        header: X-Api-Key
+        value: ${N8N_KEY:demo-key}
+      timeout: 180s               # a local model on a laptop is not fast
+
+  profiles:
+    # The workflow asks the model for JSON; the application gets it as the text.
+    triage:
+      vendor: n8n
+      model: ${OLLAMA_MODEL:llama3.1}
+      temperature: 0
+      path: /webhook/triage
+      request: '{"prompt": {{prompt}}, "model": {{model}}, "temperature": {{temperature}}}'
+      response:
+        text: $.output
+        input-tokens: $.usage.input
+        output-tokens: $.usage.output
+
+    # The prompt is a URL: the workflow fetches the page, which a model alone cannot.
+    summarize:
+      vendor: n8n
+      model: ${OLLAMA_MODEL:llama3.1}
+      max-tokens: 400
+      path: /webhook/summarize
+      request: '{"url": {{prompt}}, "model": {{model}}, "max_tokens": {{max-tokens}}}'
+      response:
+        text: $.output
+        input-tokens: $.usage.input
+        output-tokens: $.usage.output
+
+  accounting:
+    log:
+      enabled: true               # a line per call on io.github.mishastoyanov.llmprofiles.calls

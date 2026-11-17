@@ -1,0 +1,113 @@
+{
+  "id": "llmprofTriage001",
+  "name": "Triage a support ticket",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "triage",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "6f1c2b0e-7a51-4d0c-9b7e-1a2f3c4d5e01",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "llmprofDemoKey01",
+          "name": "Demo webhook key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $('Webhook').first().json.body;\n\nconst options = {};\nif (body.temperature != null) options.temperature = body.temperature;\nif (body.max_tokens != null) options.num_predict = body.max_tokens;\nconst model = body.model || $env.OLLAMA_MODEL || 'llama3.1';\n\nconst system = [\n  'You triage customer support tickets.',\n  'Answer with one JSON object and nothing else:',\n  '{\"category\": \"billing\" | \"bug\" | \"account\" | \"question\" | \"other\",',\n  ' \"priority\": \"low\" | \"normal\" | \"high\" | \"urgent\",',\n  ' \"reply\": \"a short, polite first reply to the customer, in the language of the ticket\"}',\n].join('\\n');\n\nreturn [{ json: {\n  model, stream: false, format: 'json', options,\n  messages: [\n    { role: 'system', content: system },\n    { role: 'user', content: String(body.prompt ?? '') },\n  ],\n} }];\n"
+      },
+      "name": "Build request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.OLLAMA_URL }}/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 170000
+        }
+      },
+      "name": "Ask Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ output: $json.message.content, model: $json.model, usage: { input: $json.prompt_eval_count, output: $json.eval_count } }) }}",
+        "options": {}
+      },
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build request": {
+      "main": [
+        [
+          {
+            "node": "Ask Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ask Ollama": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

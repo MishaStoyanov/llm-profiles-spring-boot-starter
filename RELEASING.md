@@ -27,7 +27,7 @@ Releases go to Maven Central through the Central Portal.
 2. In `CHANGELOG.md`, rename `Unreleased` to the version and date, and start
    a new empty `Unreleased` above it. Update the status line in `README.md`.
 3. Set the version: `mvn versions:set -DnewVersion=X.Y.Z -DgenerateBackupPoms=false`,
-   and the same in `samples/quickstart/pom.xml` (`llm-profiles.version`).
+   and the same in every `samples/*/pom.xml` (`llm-profiles.version`).
 4. Commit, tag `vX.Y.Z`.
 5. `mvn -Prelease clean deploy`. It builds, tests, signs and uploads, then
    stops: the deployment waits in the Central Portal, where it is checked and

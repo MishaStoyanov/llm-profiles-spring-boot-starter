@@ -1,0 +1,20 @@
+# n8n with the two demo workflows, calling Ollama on the host. Nothing is persisted: every
+# start imports the workflows afresh.
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:2.48.4
+    entrypoint: ["tini", "--", "sh", "/demo/start.sh"]
+    ports:
+      - "5678:5678"
+    environment:
+      N8N_KEY: ${N8N_KEY:-demo-key}                          # the X-Api-Key the webhooks expect
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.1}                # when the profile names no model
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"                  # the workflows read the two above
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./n8n/workflows:/demo/workflows:ro
+      - ./n8n/start.sh:/demo/start.sh:ro

@@ -14,8 +14,9 @@ Spring AI.
 Several models of one vendor, several vendors, and n8n workflows are called
 through one interface, and every call is accounted for honestly.
 
-A runnable example is in [`samples/quickstart`](samples/quickstart); what
-changed and when is in the [changelog](CHANGELOG.md).
+Runnable examples are in [`samples/quickstart`](samples/quickstart) and, for
+n8n workflows used as profiles, [`samples/n8n`](samples/n8n); what changed and
+when is in the [changelog](CHANGELOG.md).
 
 ## Why
 
@@ -250,7 +251,9 @@ implementing `LlmVendorAdapter`.
 ### Webhooks
 
 A `webhook` profile POSTs a JSON body to `base-url` + `path` and reads the
-answer back, so an n8n workflow is called exactly like a model.
+answer back, so an n8n workflow is called exactly like a model. A working
+pair of workflows, with Docker Compose to run them, is in
+[`samples/n8n`](samples/n8n).
 
 ```yaml
 triage:

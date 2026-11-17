@@ -43,6 +43,10 @@ Nothing has been released yet. What the first release will contain:
 - `openai-compatible` streams send only what every compatible server accepts:
   Gemini refused the `include_obfuscation` stream option. Checked against
   Gemini and Ollama for real.
+- `webhook` speaks HTTP/1.1: over plain http the JDK client asked to upgrade
+  to HTTP/2, and n8n left such requests unanswered until they timed out.
+- `samples/n8n`: two n8n workflows on Ollama, started with Docker Compose,
+  used as the profiles `triage` and `summarize`.
 
 ### Accounting
 - Every call becomes an `LlmCallEvent`: profile, vendor, model, start time,
