@@ -95,6 +95,18 @@ class StreamingAndChatModelTest {
     }
 
     @Test
+    void aStreamIsAccountedForBeforeItsEndReachesTheSubscriber() {
+        runner.run(context -> {
+            List<Integer> seenAtTheEnd = new CopyOnWriteArrayList<>();
+            summarizer(context).stream("hi")
+                    .doOnComplete(() -> seenAtTheEnd.add(events.size()))
+                    .blockLast();
+
+            assertThat(seenAtTheEnd).as("events published when completion arrived").containsExactly(1);
+        });
+    }
+
+    @Test
     void aFailingStreamIsReportedAsFailed() {
         fake.streamed = prompt -> Flux.concat(
                 Flux.just(FakeVendor.response("half", null, new org.springframework.ai.chat.metadata.EmptyUsage())),

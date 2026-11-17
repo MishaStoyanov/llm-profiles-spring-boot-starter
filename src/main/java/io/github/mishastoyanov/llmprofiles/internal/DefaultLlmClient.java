@@ -7,6 +7,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CancellationException;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 import io.github.mishastoyanov.llmprofiles.LlmCallEvent;
 import io.github.mishastoyanov.llmprofiles.LlmClient;
@@ -117,6 +119,9 @@ record DefaultLlmClient(
     /**
      * Whether the profile streams is checked on the spot, so a profile that cannot fails where
      * stream() is called. Its settings are read on subscription, which is when the call is made.
+     * <p>
+     * The event is published before completion or an error reaches the subscriber, not after
+     * (doFinally): once a stream is seen to end, its call has been accounted for.
      */
     Flux<VendorReply> stream(Prompt prompt) {
         requireStreaming(registry.resolve(key, profile));
@@ -124,10 +129,19 @@ record DefaultLlmClient(
             ResolvedProfile current = requireStreaming(registry.resolve(key, profile));
             VendorRequest request = request(current, prompt);
             StreamTally tally = new StreamTally(request.model(), registry.now());
+            Consumer<SignalType> publish = signal -> {
+                if (tally.end()) {
+                    registry.publish(tally.event(this, current, request.model(), signal));
+                }
+            };
             return current.vendor().stream(request)
                     .doOnNext(tally::add)
-                    .doOnError(tally::fail)
-                    .doFinally(signal -> registry.publish(tally.event(this, current, request.model(), signal)));
+                    .doOnComplete(() -> publish.accept(SignalType.ON_COMPLETE))
+                    .doOnError(error -> {
+                        tally.fail(error);
+                        publish.accept(SignalType.ON_ERROR);
+                    })
+                    .doOnCancel(() -> publish.accept(SignalType.CANCEL));
         });
     }
 
@@ -199,6 +213,8 @@ record DefaultLlmClient(
         private Long output;
         private Long total;
         private Throwable error;
+        /** A cancel can race the end of the stream; only the first ending is reported. */
+        private final AtomicBoolean ended = new AtomicBoolean();
 
         StreamTally(String requestedModel, Instant startedAt) {
             this.model = requestedModel;
@@ -222,6 +238,10 @@ record DefaultLlmClient(
 
         void fail(Throwable error) {
             this.error = error;
+        }
+
+        boolean end() {
+            return ended.compareAndSet(false, true);
         }
 
         LlmCallEvent event(DefaultLlmClient client, ResolvedProfile current, String requested, SignalType signal) {

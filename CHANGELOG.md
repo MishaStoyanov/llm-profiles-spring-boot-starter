@@ -20,6 +20,8 @@ Nothing has been released yet. What the first release will contain:
   leave the profile as configured; `null` removes an override.
 - Streaming with `stream(prompt)`: lazy, one listener event per stream with
   its usage and time to first token; cancellation is reported as such.
+  The event is published before the end of the stream reaches the
+  subscriber, so a stream seen to end has been accounted for.
 - `asChatModel()`: a profile as a Spring AI `ChatModel` for `ChatClient`,
   advisors and tool calling, with every call still accounted for.
 
