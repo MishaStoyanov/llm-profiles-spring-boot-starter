@@ -9,8 +9,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.stereotype.Component;
 
 /**
- * Two n8n workflows used as profiles: one triages a support ticket, the other summarises a web
- * page it fetches itself. To the code they are clients like any model.
+ * Three n8n workflows used as profiles: one triages a support ticket, one summarises a web page
+ * it fetches itself, and an agent answers a question from data through a tool. To the code they
+ * are clients like any model.
  */
 @SpringBootApplication
 public class N8nApplication {
@@ -30,10 +31,12 @@ public class N8nApplication {
 
         private final LlmClient triage;
         private final LlmClient summarize;
+        private final LlmClient askData;
 
-        Demo(LlmClient triage, LlmClient summarize) {
+        Demo(LlmClient triage, LlmClient summarize, LlmClient askData) {
             this.triage = triage;
             this.summarize = summarize;
+            this.askData = askData;
         }
 
         @Override
@@ -41,6 +44,7 @@ public class N8nApplication {
             show("triage", triage.withTag("ticket", "5521").call(TICKET));
             String page = args.getNonOptionArgs().isEmpty() ? PAGE : args.getNonOptionArgs().getFirst();
             show("summarize " + page, summarize.call(page));
+            show("ask-data", askData.call("Which month had the highest revenue, and how much?"));
         }
 
         private static void show(String what, LlmResponse response) {

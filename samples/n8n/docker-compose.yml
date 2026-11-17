@@ -1,5 +1,5 @@
-# n8n with the two demo workflows, calling Ollama on the host. Nothing is persisted: every
-# start imports the workflows afresh.
+# n8n with the demo workflows, calling Ollama on the host. The demo workflows are imported
+# afresh on every start; the account and anything made in the editor stay in n8n-data.
 services:
   n8n:
     image: docker.n8n.io/n8nio/n8n:2.48.4
@@ -16,5 +16,9 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
+      - n8n-data:/home/node/.n8n
       - ./n8n/workflows:/demo/workflows:ro
       - ./n8n/start.sh:/demo/start.sh:ro
+
+volumes:
+  n8n-data:

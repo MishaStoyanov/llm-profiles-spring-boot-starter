@@ -37,6 +37,16 @@ llm:
         input-tokens: $.usage.input
         output-tokens: $.usage.output
 
+    # An n8n AI Agent with a tool. Its nodes do not hand out token counts, so there is no
+    # path for them: usage is unknown, and the accounting says so instead of counting zero.
+    ask-data:
+      vendor: n8n
+      model: ${OLLAMA_MODEL:llama3.1}
+      path: /webhook/ask-data
+      request: '{"prompt": {{prompt}}, "model": {{model}}}'
+      response:
+        text: $.output
+
   accounting:
     log:
       enabled: true               # a line per call on io.github.mishastoyanov.llmprofiles.calls

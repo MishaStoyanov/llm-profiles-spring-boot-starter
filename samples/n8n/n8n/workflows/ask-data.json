@@ -1,0 +1,145 @@
+{
+  "id": "llmprofAskData01",
+  "name": "Answer a question from data (agent)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ask-data",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "6f1c2b0e-7a51-4d0c-9b7e-1a2f3c4d5e03",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "llmprofDemoKey01",
+          "name": "Demo webhook key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.body.prompt }}",
+        "options": {
+          "systemMessage": "You answer questions about the shop's sales. Always call the sales tool first; answer only from what it returns, in one or two sentences, with the figures. If the data cannot answer the question, say so.",
+          "maxIterations": 5
+        }
+      },
+      "name": "Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ output: $json.output }) }}",
+        "options": {}
+      },
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "model": "={{ $('Webhook').first().json.body.model || $env.OLLAMA_MODEL || 'llama3.1' }}",
+        "options": {
+          "temperature": 0
+        }
+      },
+      "name": "Ollama",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        160,
+        220
+      ],
+      "credentials": {
+        "ollamaApi": {
+          "id": "llmprofOllama001",
+          "name": "Local Ollama"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "name": "sales",
+        "description": "Sales by month, region and product, with revenue. Input: a month (2026-09), region or product to filter by, or 'all'.",
+        "jsCode": "// A tiny shop's sales, in place of a database. The agent asks; the tool answers with figures.\nconst sales = [\n  { month: '2026-08', region: 'North', product: 'Kettle',  units: 120, revenue: 4800 },\n  { month: '2026-08', region: 'South', product: 'Kettle',  units: 95,  revenue: 3800 },\n  { month: '2026-08', region: 'North', product: 'Toaster', units: 40,  revenue: 2400 },\n  { month: '2026-09', region: 'North', product: 'Kettle',  units: 130, revenue: 5200 },\n  { month: '2026-09', region: 'South', product: 'Toaster', units: 75,  revenue: 4500 },\n  { month: '2026-09', region: 'South', product: 'Kettle',  units: 60,  revenue: 2400 },\n  { month: '2026-10', region: 'North', product: 'Toaster', units: 90,  revenue: 5400 },\n  { month: '2026-10', region: 'South', product: 'Kettle',  units: 150, revenue: 6000 },\n  { month: '2026-10', region: 'North', product: 'Kettle',  units: 70,  revenue: 2800 },\n];\nconst q = String(query ?? '').toLowerCase();\nconst rows = sales.filter(r => !q || q === 'all' || Object.values(r).some(v => q.includes(String(v).toLowerCase())));\nconst totals = {};\nfor (const r of rows) totals[r.month] = (totals[r.month] ?? 0) + r.revenue;\nreturn JSON.stringify({ rows: rows.length ? rows : sales, revenue_by_month: totals });\n"
+      },
+      "name": "sales",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        340,
+        220
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "sales": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}
