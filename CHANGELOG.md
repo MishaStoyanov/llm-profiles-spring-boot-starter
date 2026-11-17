@@ -40,6 +40,9 @@ Nothing has been released yet. What the first release will contain:
   response paths.
 - `timeout` for every vendor type: the whole call, or each piece of a stream.
 - `max-retries`; a webhook is never retried.
+- `openai-compatible` streams send only what every compatible server accepts:
+  Gemini refused the `include_obfuscation` stream option. Checked against
+  Gemini and Ollama for real.
 
 ### Accounting
 - Every call becomes an `LlmCallEvent`: profile, vendor, model, start time,

@@ -30,7 +30,8 @@ public class OpenAiCompatibleVendorAdapter implements LlmVendorAdapter {
      * some value here. Both clients are given, and {@code timeout} applied to each, for the
      * reasons on {@link AnthropicVendorAdapter}.
      * <p>
-     * Streamed usage is asked for explicitly: the protocol leaves it out of a stream unless told.
+     * Stream options are left unset: Spring AI then asks for usage alone. Set explicitly, they also
+     * carry {@code include_obfuscation}, which servers other than OpenAI (Gemini) reject.
      * <p>
      * Spring AI puts a timeout of its own on every request, 60 seconds unless the options say
      * otherwise, and it overrides the client's. A call gets {@code timeout} there; a stream gets
@@ -66,7 +67,7 @@ public class OpenAiCompatibleVendorAdapter implements LlmVendorAdapter {
                         ? openAi.timeout(timeout)
                         : builder,
                 builder -> builder instanceof OpenAiChatOptions.Builder openAi
-                        ? openAi.streamUsage(true).timeout(WHOLE_STREAM)
+                        ? openAi.timeout(WHOLE_STREAM)
                         : builder);
     }
 }

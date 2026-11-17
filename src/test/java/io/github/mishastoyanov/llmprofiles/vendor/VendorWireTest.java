@@ -193,6 +193,8 @@ class VendorWireTest {
                 JsonNode sent = server.last().json();
                 assertThat(sent.get("stream").asBoolean()).isTrue();
                 assertThat(sent.at("/stream_options/include_usage").asBoolean()).as(sent.toString()).isTrue();
+                assertThat(sent.at("/stream_options").has("include_obfuscation"))
+                        .as("Gemini rejects fields only OpenAI knows: " + sent).isFalse();
                 assertThat(events.getLast().usage()).isEqualTo(new LlmUsage(9L, 2L, 11L));
                 assertThat(events.getLast().model()).isEqualTo("m1-2026");
             });

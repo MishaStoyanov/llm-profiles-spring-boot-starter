@@ -65,7 +65,7 @@ class RealVendorSmokeTest {
                 "llm.vendors.v.type=openai-compatible",
                 "llm.vendors.v.base-url=" + env("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"),
                 "llm.vendors.v.api-key=" + System.getenv("GEMINI_API_KEY"),
-                "llm.profiles.p.model=" + env("GEMINI_MODEL", "gemini-2.5-flash-lite")));
+                "llm.profiles.p.model=" + env("GEMINI_MODEL", "gemini-3.5-flash-lite")));
     }
 
     @Test
