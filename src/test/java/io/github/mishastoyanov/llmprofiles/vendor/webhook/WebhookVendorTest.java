@@ -86,6 +86,8 @@ class WebhookVendorTest {
             assertThat(response.model()).as("a webhook profile needs no model").isNull();
             assertThat(headers.getFirst().getFirst("X-Api-Key")).isEqualTo("secret");
             assertThat(headers.getFirst().getFirst("Content-Type")).isEqualTo("application/json");
+            assertThat(headers.getFirst().containsKey("Upgrade"))
+                    .as("n8n never answers a request that asks to upgrade to HTTP/2").isFalse();
         });
     }
 

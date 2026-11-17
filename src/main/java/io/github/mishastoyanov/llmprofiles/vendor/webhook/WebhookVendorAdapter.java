@@ -46,7 +46,12 @@ public class WebhookVendorAdapter implements LlmVendorAdapter {
                     + " side effects, so a failed call is never repeated behind its back");
         }
         Duration timeout = vendor.timeout() != null ? vendor.timeout() : DEFAULT_TIMEOUT;
-        HttpClient http = HttpClient.newBuilder().connectTimeout(timeout).build();
+        // HTTP/1.1: over plain http the JDK client otherwise asks to upgrade to HTTP/2, and n8n
+        // leaves such a request unanswered until it times out.
+        HttpClient http = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
+                .connectTimeout(timeout)
+                .build();
         return new WebhookVendor(http, baseUrl, auth, timeout, json);
     }
 }
