@@ -2,6 +2,7 @@ package io.github.mishastoyanov.llmprofiles.vendor;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.function.UnaryOperator;
 
 import io.github.mishastoyanov.llmprofiles.LlmProperties;
 import org.springframework.ai.ollama.OllamaChatModel;
@@ -50,8 +51,24 @@ public class OllamaVendorAdapter implements LlmVendorAdapter {
         if (vendor.maxRetries() != null) {
             model.retryTemplate(retries(vendor.maxRetries()));
         }
-        return new SpringAiVendor(model.build(), OllamaChatOptions::builder, timeout);
+        return new SpringAiVendor(model.build(), OllamaChatOptions::builder, timeout,
+                UnaryOperator.identity(), UnaryOperator.identity(), REASONING);
     }
+
+    /**
+     * Off is {@code think: false}, which every model takes; a level is a {@code think} level, which
+     * a model that cannot think refuses with an error of its own.
+     */
+    static final ReasoningOptions REASONING = (options, reasoning) -> {
+        if (options instanceof OllamaChatOptions.Builder ollama) {
+            switch (reasoning) {
+                case OFF -> ollama.disableThinking();
+                case LOW -> ollama.thinkLow();
+                case MEDIUM -> ollama.thinkMedium();
+                case HIGH, MAX -> ollama.thinkHigh();
+            }
+        }
+    };
 
     /** Spring AI's own default policy, with the number of retries changed and nothing else. */
     private static RetryTemplate retries(int maxRetries) {

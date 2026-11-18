@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS llm_profile (
     model                  VARCHAR(200),
     temperature            DOUBLE PRECISION,
     max_tokens             INTEGER,
+    reasoning              VARCHAR(20),     -- off, low, medium, high or max
     path                   VARCHAR(1000),
     request                VARCHAR(10000),
     response_text          VARCHAR(500),

@@ -50,6 +50,12 @@ public interface LlmClient {
     LlmClient withMaxTokens(Integer maxTokens);
 
     /**
+     * How much the model is to think on calls through the returned client; see {@link Reasoning}.
+     * Options a {@code ChatClient} sends in the vendor's own type win over it.
+     */
+    LlmClient withReasoning(Reasoning reasoning);
+
+    /**
      * Puts a tag on every call this client makes, for whoever reads the record of it: who asked,
      * for which job, from which feature. Over the profile's own tags of the same key; a null value
      * removes the client's tag.

@@ -11,6 +11,7 @@ import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpServer;
 import io.github.mishastoyanov.llmprofiles.LlmCallEvent;
 import io.github.mishastoyanov.llmprofiles.LlmCallListener;
+import io.github.mishastoyanov.llmprofiles.LlmClient;
 import io.github.mishastoyanov.llmprofiles.LlmProfiles;
 import io.github.mishastoyanov.llmprofiles.LlmProfilesConfigurationException;
 import io.github.mishastoyanov.llmprofiles.LlmResponse;
@@ -173,6 +174,29 @@ class WebhookVendorTest {
                 .isInstanceOf(WebhookCallException.class)
                 .hasMessageContaining("answer has nothing at $.output")
                 .hasMessageContaining("elsewhere"));
+    }
+
+    @Test
+    void theReasoningLevelReachesTheWorkflowInLowerCase() {
+        runner.withPropertyValues(
+                        "llm.profiles.triage.request={\"prompt\": {{prompt}}, \"reasoning\": {{reasoning}}}",
+                        "llm.profiles.triage.reasoning=high")
+                .run(context -> {
+                    LlmClient triage = context.getBean(LlmProfiles.class).profile("triage");
+                    triage.call("x");
+                    triage.withReasoning(null).call("x");
+
+                    assertThat(JsonMapper.shared().readTree(bodies.get(0)).path("reasoning").asString()).isEqualTo("high");
+                    assertThat(JsonMapper.shared().readTree(bodies.get(1)).path("reasoning").asString())
+                            .as("null removes the override, so the profile's level applies again").isEqualTo("high");
+                });
+    }
+
+    @Test
+    void reasoningATemplateDoesNotPassOnIsCaughtAtStartup() {
+        runner.withPropertyValues("llm.profiles.triage.reasoning=low").run(context ->
+                assertThat(context).getFailure().rootCause()
+                        .hasMessageContaining("profile 'triage': reasoning is set, but the request template has no {{reasoning}}"));
     }
 
     @Test

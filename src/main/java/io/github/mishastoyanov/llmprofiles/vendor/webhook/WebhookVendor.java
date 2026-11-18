@@ -59,7 +59,10 @@ final class WebhookVendor implements LlmVendor {
         }
         if (problems.isEmpty()) {
             try {
-                compile(profile);
+                Compiled compiled = compile(profile);
+                if (profile.reasoning() != null && !compiled.request().uses("reasoning")) {
+                    problems.add("reasoning is set, but the request template has no {{reasoning}} to pass it on");
+                }
             } catch (IllegalArgumentException e) {
                 problems.add(e.getMessage());
             }
@@ -71,7 +74,8 @@ final class WebhookVendor implements LlmVendor {
     public VendorReply call(VendorRequest request) {
         Compiled profile = compiled.computeIfAbsent(request.settings(), this::compile);
         String body = profile.request().render(new RequestTemplate.Values(
-                request.text(), request.profile(), request.model(), request.temperature(), request.maxTokens()));
+                request.text(), request.profile(), request.model(), request.temperature(), request.maxTokens(),
+                request.reasoning() == null ? null : request.reasoning().value()));
 
         HttpRequest.Builder http = HttpRequest.newBuilder(profile.uri())
                 .timeout(timeout)

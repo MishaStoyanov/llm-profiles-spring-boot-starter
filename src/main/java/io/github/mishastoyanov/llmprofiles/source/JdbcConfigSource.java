@@ -93,6 +93,7 @@ public class JdbcConfigSource implements LlmConfigSource {
             put(properties, key + ".model", row.get("model"));
             put(properties, key + ".temperature", row.get("temperature"));
             put(properties, key + ".max-tokens", row.get("max_tokens"));
+            put(properties, key + ".reasoning", row.get("reasoning"));
             put(properties, key + ".path", row.get("path"));
             put(properties, key + ".request", row.get("request"));
             put(properties, key + ".response.text", row.get("response_text"));

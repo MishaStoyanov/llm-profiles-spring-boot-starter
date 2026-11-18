@@ -3,9 +3,11 @@ package io.github.mishastoyanov.llmprofiles;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.UnaryOperator;
 
 import io.github.mishastoyanov.llmprofiles.vendor.LlmVendor;
 import io.github.mishastoyanov.llmprofiles.vendor.LlmVendorAdapter;
+import io.github.mishastoyanov.llmprofiles.vendor.ReasoningOptions;
 import io.github.mishastoyanov.llmprofiles.vendor.SpringAiVendor;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.metadata.ChatResponseMetadata;
@@ -26,6 +28,8 @@ class FakeVendor implements LlmVendorAdapter {
 
     /** Vendor names in the order they were connected, once per connection. */
     final List<String> connected = new ArrayList<>();
+    /** The reasoning level of each call that had one, as the vendor was asked to set it. */
+    final List<Reasoning> reasoning = new ArrayList<>();
 
     /** Replaced by a test that needs a different answer, or a failure. */
     Function<Prompt, ChatResponse> answer = prompt -> response(
@@ -57,7 +61,8 @@ class FakeVendor implements LlmVendorAdapter {
                 prompts.add(prompt);
                 return streamed.apply(prompt);
             }
-        }, ChatOptions::builder, vendor.timeout());
+        }, ChatOptions::builder, vendor.timeout(), UnaryOperator.identity(), UnaryOperator.identity(),
+                (ReasoningOptions) (options, level) -> reasoning.add(level));
     }
 
     Prompt lastPrompt() {

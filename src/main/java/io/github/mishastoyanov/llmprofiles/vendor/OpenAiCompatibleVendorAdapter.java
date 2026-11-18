@@ -68,6 +68,22 @@ public class OpenAiCompatibleVendorAdapter implements LlmVendorAdapter {
                         : builder,
                 builder -> builder instanceof OpenAiChatOptions.Builder openAi
                         ? openAi.timeout(WHOLE_STREAM)
-                        : builder);
+                        : builder,
+                REASONING);
     }
+
+    /**
+     * {@code reasoning_effort}. Off is {@code none} and max is {@code high}: what a server accepts
+     * beyond low, medium and high differs from model to model.
+     */
+    static final ReasoningOptions REASONING = (options, reasoning) -> {
+        if (options instanceof OpenAiChatOptions.Builder openAi) {
+            openAi.reasoningEffort(switch (reasoning) {
+                case OFF -> "none";
+                case LOW -> "low";
+                case MEDIUM -> "medium";
+                case HIGH, MAX -> "high";
+            });
+        }
+    };
 }

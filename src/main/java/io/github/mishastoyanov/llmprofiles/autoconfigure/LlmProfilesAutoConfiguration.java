@@ -7,6 +7,7 @@ import java.util.Set;
 
 import io.github.mishastoyanov.llmprofiles.LlmCallListener;
 import io.github.mishastoyanov.llmprofiles.LlmConfigSource;
+import io.github.mishastoyanov.llmprofiles.LlmOptionsCustomizer;
 import io.github.mishastoyanov.llmprofiles.LlmProfiles;
 import io.github.mishastoyanov.llmprofiles.LlmProperties;
 import io.github.mishastoyanov.llmprofiles.internal.DefaultLlmProfiles;
@@ -47,14 +48,15 @@ public class LlmProfilesAutoConfiguration {
                             ObjectProvider<LlmConfigSource> sources,
                             ObjectProvider<LlmVendorAdapter> adapters,
                             ObjectProvider<LlmCallListener> listeners,
-                            ObjectProvider<LlmProfileInjection> injection) {
+                            ObjectProvider<LlmProfileInjection> injection,
+                            ObjectProvider<LlmOptionsCustomizer> customizers) {
         List<LlmConfigSource> layers = new ArrayList<>();
         layers.add(new EnvironmentConfigSource(environment));
         sources.orderedStream().forEach(layers::add);
         LlmProfileInjection check = injection.getIfAvailable();
         DefaultLlmProfiles profiles = new DefaultLlmProfiles(layers, adapters.orderedStream().toList(),
                 listeners.orderedStream().toList(), check == null ? Set.of() : check.namesInCode(),
-                properties.accounting().async(), Clock.systemUTC());
+                properties.accounting().async(), Clock.systemUTC(), customizers.orderedStream().toList());
         if (properties.source().refreshInterval() != null) {
             profiles.refreshEvery(properties.source().refreshInterval());
         }

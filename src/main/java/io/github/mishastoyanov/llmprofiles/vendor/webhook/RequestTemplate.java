@@ -23,7 +23,7 @@ import tools.jackson.databind.json.JsonMapper;
  */
 final class RequestTemplate {
 
-    static final List<String> VARIABLES = List.of("prompt", "profile", "model", "temperature", "max-tokens");
+    static final List<String> VARIABLES = List.of("prompt", "profile", "model", "temperature", "max-tokens", "reasoning");
 
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{\\{\\s*([^}\\s]*)\\s*}}");
 
@@ -52,7 +52,7 @@ final class RequestTemplate {
                     + "; available: " + VARIABLES);
         }
         RequestTemplate parsed = new RequestTemplate(template, json);
-        String sample = parsed.render(new Values("sample \"prompt\"", "profile", "model", 0.5, 100));
+        String sample = parsed.render(new Values("sample \"prompt\"", "profile", "model", 0.5, 100, "high"));
         try {
             json.readTree(sample);
         } catch (JacksonException e) {
@@ -65,7 +65,9 @@ final class RequestTemplate {
         return parsed;
     }
 
-    record Values(String prompt, String profile, String model, Double temperature, Integer maxTokens) {
+    /** @param reasoning the level in lower case, as written in the configuration */
+    record Values(String prompt, String profile, String model, Double temperature, Integer maxTokens,
+                  String reasoning) {
 
         Map<String, Object> asMap() {
             Map<String, Object> map = new HashMap<>();
@@ -74,8 +76,19 @@ final class RequestTemplate {
             map.put("model", model);
             map.put("temperature", temperature);
             map.put("max-tokens", maxTokens);
+            map.put("reasoning", reasoning);
             return map;
         }
+    }
+
+    boolean uses(String variable) {
+        Matcher matcher = PLACEHOLDER.matcher(template);
+        while (matcher.find()) {
+            if (matcher.group(1).equals(variable)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     String render(Values values) {

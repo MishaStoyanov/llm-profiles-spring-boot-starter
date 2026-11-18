@@ -15,11 +15,13 @@ import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import io.github.mishastoyanov.llmprofiles.LlmCallEvent;
 import io.github.mishastoyanov.llmprofiles.LlmCallListener;
 import io.github.mishastoyanov.llmprofiles.LlmClient;
 import io.github.mishastoyanov.llmprofiles.LlmConfigSource;
+import io.github.mishastoyanov.llmprofiles.LlmOptionsCustomizer;
 import io.github.mishastoyanov.llmprofiles.LlmPrice;
 import io.github.mishastoyanov.llmprofiles.LlmProfiles;
 import io.github.mishastoyanov.llmprofiles.LlmProfilesConfigurationException;
@@ -30,6 +32,7 @@ import io.github.mishastoyanov.llmprofiles.vendor.LlmVendor;
 import io.github.mishastoyanov.llmprofiles.vendor.LlmVendorAdapter;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.util.StringUtils;
 
 /**
@@ -49,6 +52,7 @@ public final class DefaultLlmProfiles implements LlmProfiles, AutoCloseable {
     private final Set<String> namesInCode;
     private final CallEventDelivery delivery;
     private final Clock clock;
+    private final List<LlmOptionsCustomizer> customizers;
     private volatile Snapshot snapshot;
     private ScheduledExecutorService refresher;
     private String lastRefreshFailure;
@@ -58,10 +62,12 @@ public final class DefaultLlmProfiles implements LlmProfiles, AutoCloseable {
      * @param namesInCode profiles that code refers to by name, which a refresh may not remove
      * @param async       how listeners are called; null for on the calling thread
      * @param clock       where "now" comes from, so a test can decide what it is
+     * @param customizers the last word on every call's Spring AI options, in this order
      */
     public DefaultLlmProfiles(List<LlmConfigSource> sources, List<LlmVendorAdapter> adapters,
                               List<LlmCallListener> listeners, Set<String> namesInCode,
-                              LlmProperties.Async async, Clock clock) {
+                              LlmProperties.Async async, Clock clock, List<LlmOptionsCustomizer> customizers) {
+        this.customizers = List.copyOf(customizers);
         this.sources = List.copyOf(sources);
         this.namesInCode = Set.copyOf(namesInCode);
         this.clock = clock;
@@ -76,7 +82,7 @@ public final class DefaultLlmProfiles implements LlmProfiles, AutoCloseable {
     public LlmClient profile(String name) {
         ResolvedProfile current = resolve(name == null ? null : ProfileNames.canonical(name), name);
         return new DefaultLlmClient(current.name(), ProfileNames.canonical(current.name()), this,
-                null, null, null, Map.of());
+                null, null, null, null, Map.of());
     }
 
     /** As written in the configuration. */
@@ -166,6 +172,14 @@ public final class DefaultLlmProfiles implements LlmProfiles, AutoCloseable {
             }
         }
         return null;
+    }
+
+    /** The customizers as one step for a call through the profile; does nothing when there are none. */
+    Consumer<ChatOptions.Builder<?>> customizer(String profile) {
+        if (customizers.isEmpty()) {
+            return null;
+        }
+        return options -> customizers.forEach(customizer -> customizer.customize(profile, options));
     }
 
     Instant now() {

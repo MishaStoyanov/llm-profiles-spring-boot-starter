@@ -24,6 +24,12 @@ Nothing has been released yet. What the first release will contain:
   subscriber, so a stream seen to end has been accounted for.
 - `asChatModel()`: a profile as a Spring AI `ChatModel` for `ChatClient`,
   advisors and tool calling, with every call still accounted for.
+- `reasoning: off | low | medium | high | max` in a profile, and
+  `withReasoning`: how much a model thinks, turned into each vendor's own
+  setting; `{{reasoning}}` for webhooks, a `reasoning` column for the JDBC
+  source.
+- `LlmOptionsCustomizer` beans: the last word on the Spring AI options of
+  every call, for what a profile cannot say.
 
 ### Runtime configuration
 - `LlmConfigSource`: vendors, profiles and prices from sources besides YAML,

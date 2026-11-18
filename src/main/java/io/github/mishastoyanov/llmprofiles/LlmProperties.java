@@ -60,6 +60,8 @@ public record LlmProperties(
      *                    the template asks for it
      * @param temperature null leaves the provider's default
      * @param maxTokens   null leaves Spring AI's default for the vendor
+     * @param reasoning   how much the model is to think; null leaves the model's default. See
+     *                    {@link Reasoning} for what each vendor type makes of it
      * @param path        webhook only: appended to the vendor's {@code base-url}
      * @param request     webhook only: the JSON body, with {@code {{prompt}}} and friends filled in
      * @param response    webhook only: where in the answer the text and the usage are
@@ -71,6 +73,7 @@ public record LlmProperties(
             String model,
             Double temperature,
             Integer maxTokens,
+            Reasoning reasoning,
             String path,
             String request,
             Response response,

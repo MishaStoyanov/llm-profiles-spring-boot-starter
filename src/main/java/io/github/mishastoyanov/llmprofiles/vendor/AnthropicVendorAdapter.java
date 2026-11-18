@@ -1,14 +1,19 @@
 package io.github.mishastoyanov.llmprofiles.vendor;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.function.UnaryOperator;
 
 import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import com.anthropic.client.okhttp.AnthropicOkHttpClientAsync;
 import com.anthropic.core.Timeout;
+import com.anthropic.models.messages.OutputConfig;
 import io.github.mishastoyanov.llmprofiles.LlmProperties;
+import io.github.mishastoyanov.llmprofiles.Reasoning;
 import org.springframework.ai.anthropic.AnthropicChatModel;
 import org.springframework.ai.anthropic.AnthropicChatOptions;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.util.StringUtils;
 
 public class AnthropicVendorAdapter implements LlmVendorAdapter {
@@ -51,6 +56,38 @@ public class AnthropicVendorAdapter implements LlmVendorAdapter {
                 .anthropicClient(sync.build())
                 .anthropicClientAsync(async.build())
                 .build();
-        return new SpringAiVendor(model, AnthropicChatOptions::builder, timeout);
+        return new SpringAiVendor(model, AnthropicChatOptions::builder, timeout,
+                UnaryOperator.identity(), UnaryOperator.identity(), REASONING);
     }
+
+    /**
+     * A level turns on adaptive thinking at that effort: the model decides how much to think,
+     * within the level. Anthropic refuses a temperature while the model thinks, so a profile
+     * setting both is refused at startup.
+     */
+    static final ReasoningOptions REASONING = new ReasoningOptions() {
+        @Override
+        public void apply(ChatOptions.Builder<?> options, Reasoning reasoning) {
+            if (!(options instanceof AnthropicChatOptions.Builder anthropic)) {
+                return;
+            }
+            if (reasoning == Reasoning.OFF) {
+                anthropic.thinkingDisabled();
+                return;
+            }
+            anthropic.thinkingAdaptive().effort(switch (reasoning) {
+                case LOW -> OutputConfig.Effort.LOW;
+                case MEDIUM -> OutputConfig.Effort.MEDIUM;
+                case HIGH -> OutputConfig.Effort.HIGH;
+                case MAX, OFF -> OutputConfig.Effort.MAX;
+            });
+        }
+
+        @Override
+        public List<String> check(LlmProperties.Profile profile) {
+            return profile.reasoning() != null && profile.reasoning() != Reasoning.OFF && profile.temperature() != null
+                    ? List.of("temperature cannot be set with reasoning: Anthropic allows none while the model thinks")
+                    : List.of();
+        }
+    };
 }

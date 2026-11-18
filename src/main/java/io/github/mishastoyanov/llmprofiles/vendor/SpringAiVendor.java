@@ -1,6 +1,7 @@
 package io.github.mishastoyanov.llmprofiles.vendor;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
@@ -26,13 +27,21 @@ import reactor.core.publisher.Flux;
  * @param forCall       last word on the options of a call, for what a vendor carries in its options
  *                      rather than in its client, such as a per-request timeout
  * @param forStream     the same for a stream
+ * @param reasoning     how the vendor's options say a {@link io.github.mishastoyanov.llmprofiles.Reasoning}
+ *                      level
  */
 public record SpringAiVendor(
         ChatModel chatModel,
         Supplier<ChatOptions.Builder<?>> options,
         Duration streamTimeout,
         UnaryOperator<ChatOptions.Builder<?>> forCall,
-        UnaryOperator<ChatOptions.Builder<?>> forStream) implements LlmVendor {
+        UnaryOperator<ChatOptions.Builder<?>> forStream,
+        ReasoningOptions reasoning) implements LlmVendor {
+
+    public SpringAiVendor(ChatModel chatModel, Supplier<ChatOptions.Builder<?>> options, Duration streamTimeout,
+                          UnaryOperator<ChatOptions.Builder<?>> forCall, UnaryOperator<ChatOptions.Builder<?>> forStream) {
+        this(chatModel, options, streamTimeout, forCall, forStream, ReasoningOptions.UNSUPPORTED);
+    }
 
     public SpringAiVendor(ChatModel chatModel, Supplier<ChatOptions.Builder<?>> options, Duration streamTimeout) {
         this(chatModel, options, streamTimeout, UnaryOperator.identity(), UnaryOperator.identity());
@@ -44,7 +53,12 @@ public record SpringAiVendor(
 
     @Override
     public List<String> check(LlmProperties.Profile profile) {
-        return StringUtils.hasText(profile.model()) ? List.of() : List.of("model is not set");
+        List<String> problems = new ArrayList<>();
+        if (!StringUtils.hasText(profile.model())) {
+            problems.add("model is not set");
+        }
+        problems.addAll(reasoning.check(profile));
+        return problems;
     }
 
     @Override
@@ -78,20 +92,25 @@ public record SpringAiVendor(
      * <p>
      * They are combined into the vendor's own options type rather than passed as they came: a
      * {@code ChatClient} sends generic options, and some models accept nothing but their own type.
+     * <p>
+     * The reasoning level goes in first, so that thinking set in the caller's options wins over
+     * it; the application's customizers come last and have the final word.
      */
     private Prompt prompt(VendorRequest request, UnaryOperator<ChatOptions.Builder<?>> last) {
         ChatOptions given = request.prompt().getOptions();
         ChatOptions.Builder<?> builder = options.get();
+        if (request.reasoning() != null) {
+            reasoning.apply(builder, request.reasoning());
+        }
         if (given != null) {
             builder = builder.combineWith(given.mutate());
         }
-        builder = last.apply(builder);
-        ChatOptions chatOptions = builder
+        builder = last.apply(builder)
                 .model(request.model())
                 .temperature(request.temperature())
-                .maxTokens(request.maxTokens())
-                .build();
-        return request.prompt().mutate().chatOptions(chatOptions).build();
+                .maxTokens(request.maxTokens());
+        request.customize().accept(builder);
+        return request.prompt().mutate().chatOptions(builder.build()).build();
     }
 
     private static VendorReply reply(ChatResponse response) {

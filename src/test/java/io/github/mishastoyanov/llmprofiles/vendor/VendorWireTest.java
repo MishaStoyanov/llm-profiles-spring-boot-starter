@@ -9,9 +9,11 @@ import java.util.function.Consumer;
 import io.github.mishastoyanov.llmprofiles.LlmCallEvent;
 import io.github.mishastoyanov.llmprofiles.LlmCallListener;
 import io.github.mishastoyanov.llmprofiles.LlmClient;
+import io.github.mishastoyanov.llmprofiles.LlmOptionsCustomizer;
 import io.github.mishastoyanov.llmprofiles.LlmProfiles;
 import io.github.mishastoyanov.llmprofiles.LlmResponse;
 import io.github.mishastoyanov.llmprofiles.LlmUsage;
+import io.github.mishastoyanov.llmprofiles.Reasoning;
 import io.github.mishastoyanov.llmprofiles.autoconfigure.LlmProfilesAutoConfiguration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +21,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -48,6 +51,9 @@ class VendorWireTest {
     }
 
     private int maxRetries = 0;
+    /** Laid over the defaults below, so a key here replaces the default's value. */
+    private final List<String> extra = new ArrayList<>();
+    private LlmOptionsCustomizer customizer;
 
     private void withProfile(String type, String baseUrl, String timeout, Consumer<LlmClient> test) {
         List<String> properties = new ArrayList<>(List.of(
@@ -63,11 +69,39 @@ class VendorWireTest {
         if (timeout != null) {
             properties.add("llm.vendors.v.timeout=" + timeout);
         }
-        new ApplicationContextRunner()
+        properties.addAll(extra);
+        ApplicationContextRunner runner = new ApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(LlmProfilesAutoConfiguration.class))
                 .withBean(LlmCallListener.class, () -> events::add)
-                .withPropertyValues(properties.toArray(String[]::new))
-                .run(context -> test.accept(context.getBean(LlmProfiles.class).profile("p")));
+                .withPropertyValues(properties.toArray(String[]::new));
+        if (customizer != null) {
+            runner = runner.withBean(LlmOptionsCustomizer.class, () -> customizer);
+        }
+        runner.run(context -> test.accept(context.getBean(LlmProfiles.class).profile("p")));
+    }
+
+    /** Why the application did not start with the profile and these properties over it. */
+    private String startupFailure(String type, String... properties) {
+        List<String> all = new ArrayList<>(List.of(
+                "llm.vendors.v.type=" + type,
+                "llm.vendors.v.base-url=" + server.url(),
+                "llm.vendors.v.api-key=test-key",
+                "llm.profiles.p.vendor=v",
+                "llm.profiles.p.model=m1"));
+        all.addAll(List.of(properties));
+        StringBuilder message = new StringBuilder();
+        new ApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(LlmProfilesAutoConfiguration.class))
+                .withPropertyValues(all.toArray(String[]::new))
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    Throwable failure = context.getStartupFailure();
+                    while (failure != null) {
+                        message.append(failure.getMessage()).append('\n');
+                        failure = failure.getCause();
+                    }
+                });
+        return message.toString();
     }
 
     /** Well before the stub would have answered, which takes 3 seconds. */
@@ -316,6 +350,114 @@ class VendorWireTest {
         void aSlowAnswerHitsTheTimeout() {
             server.json(DONE).delay(3_000);
             withProfile("ollama", server.url(), "300ms", client -> assertFailsFast(() -> client.call("hi")));
+        }
+    }
+
+    /** One level in the profile, each vendor's own setting on the wire. */
+    @Nested
+    class ReasoningLevels {
+
+        @Test
+        void anthropicThinksAdaptivelyAtTheLevelAndIsToldWhenNotTo() {
+            extra.add("llm.profiles.p.temperature=");
+            extra.add("llm.profiles.p.reasoning=high");
+            server.json(Anthropic.MESSAGE);
+            server.json(Anthropic.MESSAGE);
+            withProfile("anthropic", server.url(), null, client -> {
+                client.call("hi");
+                JsonNode sent = server.last().json();
+                assertThat(sent.at("/thinking/type").asString()).as(sent.toString()).isEqualTo("adaptive");
+                assertThat(sent.at("/output_config/effort").asString()).as(sent.toString()).isEqualTo("high");
+
+                client.withReasoning(Reasoning.OFF).call("hi");
+                sent = server.last().json();
+                assertThat(sent.at("/thinking/type").asString()).as(sent.toString()).isEqualTo("disabled");
+            });
+        }
+
+        @Test
+        void anthropicRefusesATemperatureWithReasoningAtStartup() {
+            assertThat(startupFailure("anthropic", "llm.profiles.p.temperature=0.2", "llm.profiles.p.reasoning=low"))
+                    .contains("'p'").contains("temperature cannot be set with reasoning");
+        }
+
+        @Test
+        void openAiCompatibleSendsTheEffortWithOffAsNoneAndMaxAsHigh() {
+            extra.add("llm.profiles.p.reasoning=low");
+            for (int i = 0; i < 3; i++) {
+                server.json(OpenAiCompatible.COMPLETION);
+            }
+            withProfile("openai-compatible", server.url() + "/v1", null, client -> {
+                client.call("hi");
+                assertThat(server.last().json().get("reasoning_effort").asString()).isEqualTo("low");
+                client.withReasoning(Reasoning.OFF).call("hi");
+                assertThat(server.last().json().get("reasoning_effort").asString()).isEqualTo("none");
+                client.withReasoning(Reasoning.MAX).call("hi");
+                assertThat(server.last().json().get("reasoning_effort").asString()).isEqualTo("high");
+            });
+        }
+
+        @Test
+        void ollamaTurnsThinkingOffOrSetsItsLevel() {
+            extra.add("llm.profiles.p.reasoning=off");
+            server.json(Ollama.DONE);
+            server.json(Ollama.DONE);
+            withProfile("ollama", server.url(), null, client -> {
+                client.call("hi");
+                JsonNode sent = server.last().json();
+                assertThat(sent.get("think").isBoolean()).as(sent.toString()).isTrue();
+                assertThat(sent.get("think").asBoolean()).isFalse();
+
+                client.withReasoning(Reasoning.MEDIUM).call("hi");
+                assertThat(server.last().json().get("think").asString()).isEqualTo("medium");
+            });
+        }
+
+        @Test
+        void withoutReasoningNothingIsSentAndTheModelDecides() {
+            server.json(OpenAiCompatible.COMPLETION);
+            withProfile("openai-compatible", server.url() + "/v1", null, client -> {
+                client.call("hi");
+                assertThat(server.last().json().has("reasoning_effort")).isFalse();
+            });
+        }
+
+        @Test
+        void thinkingTheCallerSetsInTheVendorsOwnOptionsWinsOverTheProfile() {
+            extra.add("llm.profiles.p.reasoning=low");
+            server.json(OpenAiCompatible.COMPLETION);
+            withProfile("openai-compatible", server.url() + "/v1", null, client -> {
+                ChatClient.create(client.asChatModel()).prompt().user("hi")
+                        .options(OpenAiChatOptions.builder().reasoningEffort("medium"))
+                        .call().content();
+                assertThat(server.last().json().get("reasoning_effort").asString()).isEqualTo("medium");
+            });
+        }
+
+        @Test
+        void customizersHaveTheLastWordWithTheProfileNamed() {
+            extra.add("llm.profiles.p.reasoning=low");
+            List<String> profiles = new ArrayList<>();
+            customizer = (profile, options) -> {
+                profiles.add(profile);
+                if (options instanceof OpenAiChatOptions.Builder openAi) {
+                    openAi.reasoningEffort("minimal").seed(42);
+                }
+            };
+            server.json(OpenAiCompatible.COMPLETION);
+            withProfile("openai-compatible", server.url() + "/v1", null, client -> {
+                client.call("hi");
+                JsonNode sent = server.last().json();
+                assertThat(sent.get("reasoning_effort").asString()).isEqualTo("minimal");
+                assertThat(sent.get("seed").asInt()).isEqualTo(42);
+                assertThat(sent.get("model").asString()).as("the profile's settings are already on it").isEqualTo("m1");
+                assertThat(profiles).containsExactly("p");
+            });
+        }
+
+        @Test
+        void anUnknownLevelStopsTheApplication() {
+            assertThat(startupFailure("ollama", "llm.profiles.p.reasoning=extreme")).contains("reasoning");
         }
     }
 }

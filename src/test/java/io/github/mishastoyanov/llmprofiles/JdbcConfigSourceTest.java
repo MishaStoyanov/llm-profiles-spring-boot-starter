@@ -55,8 +55,8 @@ class JdbcConfigSourceTest {
 
             jdbc.update("INSERT INTO llm_vendor (name, type, api_key, timeout, max_retries)"
                     + " VALUES ('remote', 'fake', '${LOCAL_KEY}', '90s', 1)");
-            jdbc.update("INSERT INTO llm_profile (name, vendor, model, temperature, max_tokens, tags)"
-                    + " VALUES ('triage', 'remote', 'gpt-4.1', 0.3, 500, '{\"feature\": \"triage\"}')");
+            jdbc.update("INSERT INTO llm_profile (name, vendor, model, temperature, max_tokens, reasoning, tags)"
+                    + " VALUES ('triage', 'remote', 'gpt-4.1', 0.3, 500, 'low', '{\"feature\": \"triage\"}')");
             jdbc.update("INSERT INTO llm_price (vendor, model, input_per_million, output_per_million)"
                     + " VALUES ('remote', 'gpt-4.1', 2.00, 8.00)");
             assertThat(llm.refresh()).isTrue();
@@ -65,6 +65,7 @@ class JdbcConfigSourceTest {
             assertThat(fake.lastPrompt().getOptions().getModel()).isEqualTo("gpt-4.1");
             assertThat(fake.lastPrompt().getOptions().getTemperature()).isEqualTo(0.3);
             assertThat(fake.lastPrompt().getOptions().getMaxTokens()).isEqualTo(500);
+            assertThat(fake.reasoning).containsExactly(Reasoning.LOW);
             LlmCallEvent event = events.getLast();
             assertThat(event.tags()).containsEntry("feature", "triage");
             assertThat(event.price()).isEqualTo(new LlmPrice(new BigDecimal("2.0000"), new BigDecimal("8.0000")));

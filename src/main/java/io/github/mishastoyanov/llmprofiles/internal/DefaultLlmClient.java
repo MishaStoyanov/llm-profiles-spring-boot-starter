@@ -14,6 +14,7 @@ import io.github.mishastoyanov.llmprofiles.LlmCallEvent;
 import io.github.mishastoyanov.llmprofiles.LlmClient;
 import io.github.mishastoyanov.llmprofiles.LlmResponse;
 import io.github.mishastoyanov.llmprofiles.LlmUsage;
+import io.github.mishastoyanov.llmprofiles.Reasoning;
 import io.github.mishastoyanov.llmprofiles.vendor.VendorReply;
 import io.github.mishastoyanov.llmprofiles.vendor.VendorRequest;
 import org.springframework.ai.chat.model.ChatModel;
@@ -29,7 +30,8 @@ import reactor.core.publisher.SignalType;
  *
  * @param profile the name as written in the configuration
  * @param key     the name the registry files it under
- * @param model   the override, or null for the profile's own; likewise temperature and maxTokens
+ * @param model   the override, or null for the profile's own; likewise temperature, maxTokens and
+ *                reasoning
  * @param tags    the client's own, laid over the profile's on each call
  */
 record DefaultLlmClient(
@@ -39,6 +41,7 @@ record DefaultLlmClient(
         String model,
         Double temperature,
         Integer maxTokens,
+        Reasoning reasoning,
         Map<String, String> tags) implements LlmClient {
 
     /** What one call through the client came to. */
@@ -70,17 +73,22 @@ record DefaultLlmClient(
 
     @Override
     public LlmClient withModel(String model) {
-        return new DefaultLlmClient(profile, key, registry, model, temperature, maxTokens, tags);
+        return new DefaultLlmClient(profile, key, registry, model, temperature, maxTokens, reasoning, tags);
     }
 
     @Override
     public LlmClient withTemperature(Double temperature) {
-        return new DefaultLlmClient(profile, key, registry, model, temperature, maxTokens, tags);
+        return new DefaultLlmClient(profile, key, registry, model, temperature, maxTokens, reasoning, tags);
     }
 
     @Override
     public LlmClient withMaxTokens(Integer maxTokens) {
-        return new DefaultLlmClient(profile, key, registry, model, temperature, maxTokens, tags);
+        return new DefaultLlmClient(profile, key, registry, model, temperature, maxTokens, reasoning, tags);
+    }
+
+    @Override
+    public LlmClient withReasoning(Reasoning reasoning) {
+        return new DefaultLlmClient(profile, key, registry, model, temperature, maxTokens, reasoning, tags);
     }
 
     @Override
@@ -92,7 +100,7 @@ record DefaultLlmClient(
         } else {
             next.put(key, value);
         }
-        return new DefaultLlmClient(profile, this.key, registry, model, temperature, maxTokens,
+        return new DefaultLlmClient(profile, this.key, registry, model, temperature, maxTokens, reasoning,
                 Collections.unmodifiableMap(next));
     }
 
@@ -170,16 +178,19 @@ record DefaultLlmClient(
         return new ResolvedRequestValues(
                 first(given == null ? null : given.getModel(), model, current.settings().model()),
                 first(given == null ? null : given.getTemperature(), temperature, current.settings().temperature()),
-                first(given == null ? null : given.getMaxTokens(), maxTokens, current.settings().maxTokens()));
+                first(given == null ? null : given.getMaxTokens(), maxTokens, current.settings().maxTokens()),
+                first(reasoning, current.settings().reasoning()));
     }
 
-    record ResolvedRequestValues(String model, Double temperature, Integer maxTokens) {
+    /** Reasoning has no place in Spring AI's generic options: a caller's comes in the vendor's own. */
+    record ResolvedRequestValues(String model, Double temperature, Integer maxTokens, Reasoning reasoning) {
     }
 
     private VendorRequest request(ResolvedProfile current, Prompt prompt) {
         ResolvedRequestValues values = values(current, prompt.getOptions());
         return new VendorRequest(profile, current.settings(), prompt,
-                values.model(), values.temperature(), values.maxTokens());
+                values.model(), values.temperature(), values.maxTokens(), values.reasoning(),
+                registry.customizer(profile));
     }
 
     @SafeVarargs

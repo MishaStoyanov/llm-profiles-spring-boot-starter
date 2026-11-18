@@ -61,6 +61,7 @@ llm:
       vendor: anthropic
       model: claude-opus-5-5
       max-tokens: 4000
+      reasoning: high          # off, low, medium, high or max
     local-draft:
       vendor: ollama
       model: llama3
@@ -178,6 +179,65 @@ With tools, `ChatClient` sends the question, runs the tool and sends its
 result back: two round trips to the vendor, two calls through the profile,
 and listeners hear of each with its own usage.
 
+### Reasoning
+
+How much a model thinks before it answers is said once, in the profile, the
+same way for every vendor:
+
+```yaml
+local-draft:
+  vendor: ollama
+  model: gemma4:12b
+  max-tokens: 200
+  reasoning: off
+```
+
+`off`, `low`, `medium`, `high` or `max`; without it, the model decides.
+`withReasoning(...)` overrides it per client, like the other overrides. Each
+vendor type turns the level into its own setting:
+
+| vendor type         | `off`               | `low` … `high`                    | `max`         |
+|---------------------|---------------------|-----------------------------------|---------------|
+| `anthropic`         | thinking disabled   | adaptive thinking at that effort  | effort `max`  |
+| `openai-compatible` | `reasoning_effort: none` | `reasoning_effort` of the level | `high`     |
+| `ollama`            | `think: false`      | `think` level                     | `high`        |
+| `webhook`           | `{{reasoning}}` is `"off"` | `"low"` … `"high"`         | `"max"`       |
+
+Which values a model accepts is the model's: a model that cannot think
+refuses any level but `off`, and not every OpenAI-compatible server knows
+`none` (Gemini 3 Flash-Lite answers it with a 400). At startup a level that
+does not exist, a webhook profile whose template has no `{{reasoning}}`, and
+an Anthropic profile with both a level and a temperature, which Anthropic
+does not allow while a model thinks, stop the application.
+
+A level is the thinking a model does, not a budget. Thinking is billed as
+output, and providers count it in the output tokens, with one exception for
+now: Gemini's OpenAI-compatible endpoint leaves it out, so a Gemini call that
+thinks is accounted for below its price.
+
+### Options a profile cannot express
+
+For anything else in a vendor's options (a thinking budget, a seed, a
+parameter only one provider has) declare an `LlmOptionsCustomizer`. It gets
+the options of every call and stream about to be sent, in the vendor's own
+builder type with the profile's settings already on it, and has the last
+word:
+
+```java
+@Bean
+LlmOptionsCustomizer reviewerThinking() {
+    return (profile, options) -> {
+        if (profile.equals("reviewer") && options instanceof AnthropicChatOptions.Builder anthropic) {
+            anthropic.thinkingEnabled(12_000);
+        }
+    };
+}
+```
+
+It is code rather than configuration on purpose: mapping every vendor's
+every parameter from YAML would be the general mapping engine this library
+does not want to be.
+
 ### Timeouts and retries
 
 `timeout` bounds the wait for the vendor: for a call, the whole answer; for a
@@ -271,7 +331,7 @@ quoted and escaped, a number as a number, an unset value as `null`. That is
 why it is written **without quotes**. A prompt containing quotes or line
 breaks then cannot break the body, which pasting raw text between quotes
 would. Available placeholders: `{{prompt}}`, `{{profile}}`, `{{model}}`,
-`{{temperature}}`, `{{max-tokens}}`.
+`{{temperature}}`, `{{max-tokens}}`, `{{reasoning}}`.
 
 Response paths take `.names` and `[indexes]`, for example
 `$.choices[0].message.content`. `$` is the whole body, and then a plain-text

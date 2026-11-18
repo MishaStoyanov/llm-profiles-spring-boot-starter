@@ -43,7 +43,7 @@ class RefreshTest {
     }
 
     private static LlmProperties.Profile profile(String vendor, String model) {
-        return new LlmProperties.Profile(vendor, model, null, null, null, null, null, null);
+        return new LlmProperties.Profile(vendor, model, null, null, null, null, null, null, null);
     }
 
     @Test
