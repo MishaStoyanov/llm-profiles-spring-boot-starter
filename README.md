@@ -211,9 +211,17 @@ an Anthropic profile with both a level and a temperature, which Anthropic
 does not allow while a model thinks, stop the application.
 
 A level is the thinking a model does, not a budget. Thinking is billed as
-output, and providers count it in the output tokens, with one exception for
-now: Gemini's OpenAI-compatible endpoint leaves it out, so a Gemini call that
-thinks is accounted for below its price.
+output, so `LlmUsage.outputTokens()` always includes it, and
+`reasoningTokens()` says how much of it was thinking, or `null` when the
+provider does not say:
+
+| vendor type         | where the thinking count comes from                                        |
+|---------------------|-----------------------------------------------------------------------------|
+| `anthropic`         | not reported apart; output includes it, `reasoningTokens` is `null`          |
+| `openai-compatible` | `completion_tokens_details.reasoning_tokens`, already in the output          |
+| `openai-compatible` | Gemini: not reported and left out of the output; the total exceeds input plus output by it, so that difference is added to the output and becomes `reasoningTokens` |
+| `ollama`            | not reported apart; output includes it, `reasoningTokens` is `null`          |
+| `webhook`           | `response.reasoning-tokens`, a path to how many of the output were thinking  |
 
 ### Options a profile cannot express
 
@@ -324,6 +332,7 @@ triage:
     text: $.output
     input-tokens: $.usage.input
     output-tokens: $.usage.output
+    reasoning-tokens: $.usage.thinking   # optional: how many of the output were thinking
 ```
 
 A placeholder is replaced by a complete JSON value: a string arrives already
@@ -489,6 +498,7 @@ INFO for a success and WARN for a failure. What is not known is written as `?`:
 
 ```
 profile=summarizer vendor=anthropic model=claude-haiku-4-5-20251001 latency=812ms input=120 output=40 cost=0.00032 (input 0.00012, output 0.0002) tags={job=42}
+profile=classify vendor=gemini model=gemini-3.5-flash-lite latency=1530ms input=12 output=259 reasoning=258 cost=0.0001048 (input 0.0000012, output 0.0001036)
 profile=summarizer vendor=anthropic model=claude-haiku-4-5 latency=95ms input=120 output=? cost=? (input 0.00012, output ?) failed=CancellationException: ...
 profile=local-draft vendor=ollama model=llama3 latency=2140ms input=? output=? cost=unpriced
 ```
@@ -496,7 +506,9 @@ profile=local-draft vendor=ollama model=llama3 latency=2140ms input=? output=? c
 **Micrometer.** `llm.calls` (timer; tags `profile`, `vendor`, `model`,
 `outcome` = `success` / `error` / `cancelled`, `priced`), `llm.tokens`
 (counter; plus `type` = `input` / `output`, only counts the provider
-reported) and `llm.cost` (counter; plus `type` = `input` / `output`, each
+reported), `llm.tokens.reasoning` (counter; the part of the output that was
+thinking, kept apart so that a sum over `llm.tokens` counts it once) and
+`llm.cost` (counter; plus `type` = `input` / `output`, each
 only when the model has a price and that kind of token was reported).
 Summing `llm.cost` gives what is known; `llm.calls{priced="false"}` shows
 how much is not.

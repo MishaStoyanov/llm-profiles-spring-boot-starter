@@ -53,8 +53,11 @@ public class LogCallListener implements LlmCallListener {
             line.append(" first-token=").append(millis(event.firstTokenLatency()));
         }
         line.append(" input=").append(orUnknown(usage.inputTokens()))
-                .append(" output=").append(orUnknown(usage.outputTokens()))
-                .append(" cost=").append(cost(event));
+                .append(" output=").append(orUnknown(usage.outputTokens()));
+        if (usage.reasoningTokens() != null) {
+            line.append(" reasoning=").append(usage.reasoningTokens());
+        }
+        line                .append(" cost=").append(cost(event));
         Map<String, String> tags = event.tags();
         if (!tags.isEmpty()) {
             line.append(" tags=").append(tags);

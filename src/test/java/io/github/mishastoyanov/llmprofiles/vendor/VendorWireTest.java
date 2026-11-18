@@ -235,6 +235,35 @@ class VendorWireTest {
         }
 
         @Test
+        void thinkingOpenAiCountsInsideTheOutputIsReadFromItsDetails() {
+            server.json(COMPLETION.replace("\"total_tokens\": 11}",
+                    "\"total_tokens\": 11, \"completion_tokens_details\": {\"reasoning_tokens\": 1}}"));
+            withProfile("openai-compatible", server.url() + "/v1", null, client ->
+                    assertThat(client.call("hi").usage()).isEqualTo(new LlmUsage(9L, 2L, 11L, 1L)));
+        }
+
+        @Test
+        void thinkingGeminiLeavesOutOfTheOutputIsAddedToIt() {
+            server.json(COMPLETION.replace("\"total_tokens\": 11", "\"total_tokens\": 250"));
+            withProfile("openai-compatible", server.url() + "/v1", null, client ->
+                    assertThat(client.call("hi").usage())
+                            .as("billed as output, so counted as output")
+                            .isEqualTo(new LlmUsage(9L, 241L, 250L, 239L)));
+        }
+
+        @Test
+        void aStreamCountsGeminisThinkingToo() {
+            server.events(
+                    chunk("Hello", "\"stop\"", null),
+                    chunk(null, null, "{\"prompt_tokens\": 9, \"completion_tokens\": 2, \"total_tokens\": 250}"),
+                    "[DONE]");
+            withProfile("openai-compatible", server.url() + "/v1", null, client -> {
+                client.stream("hi").blockLast();
+                assertThat(events.getLast().usage()).isEqualTo(new LlmUsage(9L, 241L, 250L, 239L));
+            });
+        }
+
+        @Test
         void aSlowAnswerHitsTheTimeout() {
             server.json(COMPLETION).delay(3_000);
             withProfile("openai-compatible", server.url() + "/v1", "300ms", client -> assertFailsFast(() -> client.call("hi")));

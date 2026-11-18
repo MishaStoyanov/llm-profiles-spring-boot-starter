@@ -5,8 +5,11 @@ import java.time.Duration;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
 import com.openai.client.okhttp.OpenAIOkHttpClientAsync;
 import com.openai.core.Timeout;
+import com.openai.models.completions.CompletionUsage;
 import io.github.mishastoyanov.llmprofiles.LlmProperties;
+import io.github.mishastoyanov.llmprofiles.LlmUsage;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.util.StringUtils;
@@ -69,7 +72,36 @@ public class OpenAiCompatibleVendorAdapter implements LlmVendorAdapter {
                 builder -> builder instanceof OpenAiChatOptions.Builder openAi
                         ? openAi.timeout(WHOLE_STREAM)
                         : builder,
-                REASONING);
+                REASONING, OpenAiCompatibleVendorAdapter::usage);
+    }
+
+    /**
+     * OpenAI counts thinking inside {@code completion_tokens} and says how much in
+     * {@code reasoning_tokens}. Gemini leaves it out of {@code completion_tokens} and says nothing
+     * of it, so the only trace is a total larger than input and output together; that difference
+     * is taken as thinking and added to the output, which is what it is billed as.
+     */
+    static LlmUsage usage(ChatResponse response) {
+        LlmUsage usage = LlmUsage.from(response);
+        Object reported = response == null || response.getMetadata() == null || response.getMetadata().getUsage() == null
+                ? null : response.getMetadata().getUsage().getNativeUsage();
+        if (reported instanceof CompletionUsage completion) {
+            Long reasoning = completion.completionTokensDetails()
+                    .flatMap(CompletionUsage.CompletionTokensDetails::reasoningTokens)
+                    .filter(tokens -> tokens > 0)
+                    .orElse(null);
+            if (reasoning != null) {
+                return usage.withReasoningTokens(reasoning);
+            }
+        }
+        Long input = usage.inputTokens();
+        Long output = usage.outputTokens();
+        Long total = usage.totalTokens();
+        if (input != null && output != null && total != null && total > input + output) {
+            long unaccounted = total - input - output;
+            return new LlmUsage(input, output + unaccounted, total, unaccounted);
+        }
+        return usage;
     }
 
     /**

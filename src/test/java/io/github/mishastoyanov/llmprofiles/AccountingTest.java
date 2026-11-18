@@ -160,6 +160,44 @@ class AccountingTest {
     }
 
     @Test
+    void thinkingIsCountedApartAndNotTwice() {
+        fake.answer = prompt -> FakeVendor.response("ok", "small", new DefaultUsage(12, 3, 15, 2L));
+        SimpleMeterRegistry meters = new SimpleMeterRegistry();
+        DataSource dataSource = h2("reasoning");
+        runner.withBean(MeterRegistry.class, () -> meters)
+                .withBean(DataSource.class, () -> dataSource)
+                .withPropertyValues("llm.accounting.jdbc.enabled=true", "llm.accounting.jdbc.create-table=true")
+                .run(context -> {
+                    profile(context, "summarizer").chat("hi");
+
+                    LlmCallEvent event = events.getFirst();
+                    assertThat(event.usage()).isEqualTo(new LlmUsage(12L, 3L, 15L, 2L));
+                    assertThat(event.outputCost()).as("thinking is part of the output, billed once")
+                            .isEqualByComparingTo("0.000015");
+                    assertThat(LogCallListener.format(event)).contains(" input=12 output=3 reasoning=2 cost=");
+                    assertThat(meters.get(MicrometerCallListener.TOKENS).tags("type", "output").counter().count())
+                            .isEqualTo(3);
+                    assertThat(meters.get(MicrometerCallListener.REASONING_TOKENS).counter().count()).isEqualTo(2);
+                    assertThat(meters.find(MicrometerCallListener.TOKENS).tags("type", "reasoning").counter())
+                            .as("a sum over the token types must not count thinking twice").isNull();
+                    assertThat(new JdbcTemplate(dataSource).queryForObject("SELECT reasoning_tokens FROM llm_call", Long.class))
+                            .isEqualTo(2L);
+                });
+    }
+
+    @Test
+    void withoutWordOnThinkingThereIsNoReasoningCount() {
+        SimpleMeterRegistry meters = new SimpleMeterRegistry();
+        runner.withBean(MeterRegistry.class, () -> meters).run(context -> {
+            profile(context, "summarizer").chat("hi");
+
+            assertThat(events.getFirst().usage().reasoningTokens()).isNull();
+            assertThat(LogCallListener.format(events.getFirst())).doesNotContain("reasoning=");
+            assertThat(meters.find(MicrometerCallListener.REASONING_TOKENS).counter()).isNull();
+        });
+    }
+
+    @Test
     void theLogSinkIsOffUntilSwitchedOn() {
         runner.run(context -> assertThat(context).doesNotHaveBean(LogCallListener.class));
         runner.withPropertyValues("llm.accounting.log.enabled=true")

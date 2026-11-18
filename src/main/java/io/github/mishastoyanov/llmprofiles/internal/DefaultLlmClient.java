@@ -223,6 +223,7 @@ record DefaultLlmClient(
         private Long input;
         private Long output;
         private Long total;
+        private Long reasoning;
         private Throwable error;
         /** A cancel can race the end of the stream; only the first ending is reported. */
         private final AtomicBoolean ended = new AtomicBoolean();
@@ -244,6 +245,7 @@ record DefaultLlmClient(
                 input = max(input, usage.inputTokens());
                 output = max(output, usage.outputTokens());
                 total = max(total, usage.totalTokens());
+                reasoning = max(reasoning, usage.reasoningTokens());
             }
         }
 
@@ -262,7 +264,7 @@ record DefaultLlmClient(
             // A piece's own total covers only what that piece reported, so the sum is preferred.
             Long sum = input != null && output != null ? Long.valueOf(input + output) : total;
             return client.event(current, model, requested, startedAt, since(start), firstToken,
-                    new LlmUsage(input, output, sum), failure);
+                    new LlmUsage(input, output, sum, reasoning), failure);
         }
 
         private static Long max(Long current, Long next) {

@@ -28,6 +28,12 @@ Nothing has been released yet. What the first release will contain:
   `withReasoning`: how much a model thinks, turned into each vendor's own
   setting; `{{reasoning}}` for webhooks, a `reasoning` column for the JDBC
   source.
+- `LlmUsage.reasoningTokens()`: how many of the output tokens were thinking,
+  where the provider says (OpenAI's `reasoning_tokens`, a webhook's
+  `response.reasoning-tokens`). Gemini's thinking, which its
+  OpenAI-compatible endpoint leaves out of the output, is added to the output
+  so its cost is right. In the log line, as `llm.tokens.reasoning`, and as
+  `reasoning_tokens` in `llm_call`.
 - `LlmOptionsCustomizer` beans: the last word on the Spring AI options of
   every call, for what a profile cannot say.
 

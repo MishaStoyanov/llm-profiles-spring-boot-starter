@@ -29,6 +29,8 @@ public class MicrometerCallListener implements LlmCallListener {
 
     public static final String CALLS = "llm.calls";
     public static final String TOKENS = "llm.tokens";
+    /** Apart from {@link #TOKENS}: thinking is already counted in its output, and a sum over it must stay right. */
+    public static final String REASONING_TOKENS = "llm.tokens.reasoning";
     public static final String COST = "llm.cost";
 
     private final MeterRegistry registry;
@@ -53,6 +55,14 @@ public class MicrometerCallListener implements LlmCallListener {
         LlmUsage usage = event.usage() == null ? LlmUsage.UNKNOWN : event.usage();
         tokens(tags, "input", usage.inputTokens());
         tokens(tags, "output", usage.outputTokens());
+        if (usage.reasoningTokens() != null) {
+            Counter.builder(REASONING_TOKENS)
+                    .description("Output tokens a model spent thinking, as far as providers report it")
+                    .baseUnit("tokens")
+                    .tags(tags)
+                    .register(registry)
+                    .increment(usage.reasoningTokens());
+        }
 
         cost(tags, "input", event.inputCost());
         cost(tags, "output", event.outputCost());

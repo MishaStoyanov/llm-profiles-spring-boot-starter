@@ -84,8 +84,11 @@ public record LlmProperties(
         }
     }
 
-    /** Paths such as {@code $.output} or {@code $.choices[0].text}; {@code $} is the whole body. */
-    public record Response(String text, String inputTokens, String outputTokens) {
+    /**
+     * Paths such as {@code $.output} or {@code $.choices[0].text}; {@code $} is the whole body.
+     * {@code reasoningTokens} is how many of the output tokens were thinking, not more on top.
+     */
+    public record Response(String text, String inputTokens, String outputTokens, String reasoningTokens) {
     }
 
     /** Per million tokens, in whatever currency the configuration is written in; both are required. */

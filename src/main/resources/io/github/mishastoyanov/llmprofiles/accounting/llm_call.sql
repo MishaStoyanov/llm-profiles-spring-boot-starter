@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS llm_call (
     input_tokens       BIGINT,
     output_tokens      BIGINT,
     total_tokens       BIGINT,
+    reasoning_tokens   BIGINT,
     input_per_million  DECIMAL(12, 4),
     output_per_million DECIMAL(12, 4),
     latency_ms         BIGINT                   NOT NULL,

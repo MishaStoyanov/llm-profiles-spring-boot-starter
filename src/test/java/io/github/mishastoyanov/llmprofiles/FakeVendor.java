@@ -62,7 +62,15 @@ class FakeVendor implements LlmVendorAdapter {
                 return streamed.apply(prompt);
             }
         }, ChatOptions::builder, vendor.timeout(), UnaryOperator.identity(), UnaryOperator.identity(),
-                (ReasoningOptions) (options, level) -> reasoning.add(level));
+                (ReasoningOptions) (options, level) -> reasoning.add(level),
+                FakeVendor::usage);
+    }
+
+    /** A {@code Long} as the native usage is how many of the output tokens were thinking. */
+    private static LlmUsage usage(ChatResponse response) {
+        LlmUsage usage = LlmUsage.from(response);
+        return response.getMetadata().getUsage().getNativeUsage() instanceof Long reasoning
+                ? usage.withReasoningTokens(reasoning) : usage;
     }
 
     Prompt lastPrompt() {

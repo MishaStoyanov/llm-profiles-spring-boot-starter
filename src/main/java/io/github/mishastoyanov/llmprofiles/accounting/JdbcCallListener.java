@@ -47,8 +47,8 @@ public class JdbcCallListener implements LlmCallListener {
         this.jdbc = jdbc;
         this.table = table;
         this.insert = "INSERT INTO " + table + " (started_at, profile, vendor, model, input_tokens, output_tokens,"
-                + " total_tokens, input_per_million, output_per_million, latency_ms, first_token_ms, error, tags)"
-                + " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + " total_tokens, reasoning_tokens, input_per_million, output_per_million, latency_ms, first_token_ms,"
+                + " error, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
     }
 
     /** {@code CREATE TABLE IF NOT EXISTS}, from {@value #SCHEMA} with the configured name. */
@@ -67,12 +67,13 @@ public class JdbcCallListener implements LlmCallListener {
             setLong(statement, 5, usage.inputTokens());
             setLong(statement, 6, usage.outputTokens());
             setLong(statement, 7, usage.totalTokens());
-            statement.setBigDecimal(8, event.priced() ? event.price().inputPerMillion() : null);
-            statement.setBigDecimal(9, event.priced() ? event.price().outputPerMillion() : null);
-            statement.setLong(10, event.latency().toMillis());
-            setLong(statement, 11, event.firstTokenLatency() == null ? null : event.firstTokenLatency().toMillis());
-            statement.setString(12, error(event));
-            statement.setString(13, event.tags().isEmpty() ? null : JsonMapper.shared().writeValueAsString(event.tags()));
+            setLong(statement, 8, usage.reasoningTokens());
+            statement.setBigDecimal(9, event.priced() ? event.price().inputPerMillion() : null);
+            statement.setBigDecimal(10, event.priced() ? event.price().outputPerMillion() : null);
+            statement.setLong(11, event.latency().toMillis());
+            setLong(statement, 12, event.firstTokenLatency() == null ? null : event.firstTokenLatency().toMillis());
+            statement.setString(13, error(event));
+            statement.setString(14, event.tags().isEmpty() ? null : JsonMapper.shared().writeValueAsString(event.tags()));
         });
     }
 

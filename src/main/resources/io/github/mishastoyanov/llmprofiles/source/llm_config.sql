@@ -13,18 +13,19 @@ CREATE TABLE IF NOT EXISTS llm_vendor (
 );
 
 CREATE TABLE IF NOT EXISTS llm_profile (
-    name                   VARCHAR(200)  NOT NULL PRIMARY KEY,
-    vendor                 VARCHAR(200)  NOT NULL,
-    model                  VARCHAR(200),
-    temperature            DOUBLE PRECISION,
-    max_tokens             INTEGER,
-    reasoning              VARCHAR(20),     -- off, low, medium, high or max
-    path                   VARCHAR(1000),
-    request                VARCHAR(10000),
-    response_text          VARCHAR(500),
-    response_input_tokens  VARCHAR(500),
-    response_output_tokens VARCHAR(500),
-    tags                   VARCHAR(4000)    -- a JSON object of strings, as in {"feature": "summaries"}
+    name                      VARCHAR(200)  NOT NULL PRIMARY KEY,
+    vendor                    VARCHAR(200)  NOT NULL,
+    model                     VARCHAR(200),
+    temperature               DOUBLE PRECISION,
+    max_tokens                INTEGER,
+    reasoning                 VARCHAR(20),     -- off, low, medium, high or max
+    path                      VARCHAR(1000),
+    request                   VARCHAR(10000),
+    response_text             VARCHAR(500),
+    response_input_tokens     VARCHAR(500),
+    response_output_tokens    VARCHAR(500),
+    response_reasoning_tokens VARCHAR(500),
+    tags                      VARCHAR(4000)    -- a JSON object of strings, as in {"feature": "summaries"}
 );
 
 CREATE TABLE IF NOT EXISTS llm_price (

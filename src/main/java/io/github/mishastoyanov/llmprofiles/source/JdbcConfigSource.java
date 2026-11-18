@@ -99,6 +99,7 @@ public class JdbcConfigSource implements LlmConfigSource {
             put(properties, key + ".response.text", row.get("response_text"));
             put(properties, key + ".response.input-tokens", row.get("response_input_tokens"));
             put(properties, key + ".response.output-tokens", row.get("response_output_tokens"));
+            put(properties, key + ".response.reasoning-tokens", row.get("response_reasoning_tokens"));
             tags(row, problems).forEach((tag, value) -> put(properties, key + ".tags[" + tag + "]", value));
         }
 

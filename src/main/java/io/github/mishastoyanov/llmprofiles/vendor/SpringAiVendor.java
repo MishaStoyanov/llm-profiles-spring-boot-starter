@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 
@@ -29,6 +30,8 @@ import reactor.core.publisher.Flux;
  * @param forStream     the same for a stream
  * @param reasoning     how the vendor's options say a {@link io.github.mishastoyanov.llmprofiles.Reasoning}
  *                      level
+ * @param usage         what a reply consumed, for a vendor that reports more than Spring AI's
+ *                      common usage carries, such as thinking
  */
 public record SpringAiVendor(
         ChatModel chatModel,
@@ -36,7 +39,14 @@ public record SpringAiVendor(
         Duration streamTimeout,
         UnaryOperator<ChatOptions.Builder<?>> forCall,
         UnaryOperator<ChatOptions.Builder<?>> forStream,
-        ReasoningOptions reasoning) implements LlmVendor {
+        ReasoningOptions reasoning,
+        Function<ChatResponse, LlmUsage> usage) implements LlmVendor {
+
+    public SpringAiVendor(ChatModel chatModel, Supplier<ChatOptions.Builder<?>> options, Duration streamTimeout,
+                          UnaryOperator<ChatOptions.Builder<?>> forCall, UnaryOperator<ChatOptions.Builder<?>> forStream,
+                          ReasoningOptions reasoning) {
+        this(chatModel, options, streamTimeout, forCall, forStream, reasoning, LlmUsage::from);
+    }
 
     public SpringAiVendor(ChatModel chatModel, Supplier<ChatOptions.Builder<?>> options, Duration streamTimeout,
                           UnaryOperator<ChatOptions.Builder<?>> forCall, UnaryOperator<ChatOptions.Builder<?>> forStream) {
@@ -73,7 +83,7 @@ public record SpringAiVendor(
 
     @Override
     public Flux<VendorReply> stream(VendorRequest request) {
-        Flux<VendorReply> pieces = chatModel.stream(prompt(request, forStream)).map(SpringAiVendor::reply);
+        Flux<VendorReply> pieces = chatModel.stream(prompt(request, forStream)).map(this::reply);
         if (streamTimeout == null) {
             return pieces;
         }
@@ -113,8 +123,8 @@ public record SpringAiVendor(
         return request.prompt().mutate().chatOptions(builder.build()).build();
     }
 
-    private static VendorReply reply(ChatResponse response) {
-        return new VendorReply(text(response), LlmUsage.from(response), model(response), response);
+    private VendorReply reply(ChatResponse response) {
+        return new VendorReply(text(response), usage.apply(response), model(response), response);
     }
 
     private static String text(ChatResponse response) {

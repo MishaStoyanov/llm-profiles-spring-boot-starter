@@ -27,7 +27,8 @@ final class WebhookVendor implements LlmVendor {
     private static final int BODY_EXCERPT = 500;
 
     /** What a profile's settings compile to, kept so each call does not parse them again. */
-    private record Compiled(URI uri, RequestTemplate request, ResponsePath text, ResponsePath inputTokens, ResponsePath outputTokens) {
+    private record Compiled(URI uri, RequestTemplate request, ResponsePath text, ResponsePath inputTokens,
+                            ResponsePath outputTokens, ResponsePath reasoningTokens) {
     }
 
     private final HttpClient http;
@@ -128,7 +129,8 @@ final class WebhookVendor implements LlmVendor {
         Long input = tokens(profile.inputTokens(), root);
         Long output = tokens(profile.outputTokens(), root);
         Long total = input != null && output != null ? input + output : null;
-        return new VendorReply(text.isString() ? text.stringValue() : text.toString(), new LlmUsage(input, output, total), null);
+        LlmUsage usage = new LlmUsage(input, output, total, tokens(profile.reasoningTokens(), root));
+        return new VendorReply(text.isString() ? text.stringValue() : text.toString(), usage, null);
     }
 
     /** Null when the path is not configured, the value is absent, or it is not a whole number. */
@@ -146,8 +148,13 @@ final class WebhookVendor implements LlmVendor {
                 resolve(profile.path()),
                 RequestTemplate.parse(profile.request(), json),
                 ResponsePath.parse(response.text()),
-                StringUtils.hasText(response.inputTokens()) ? ResponsePath.parse(response.inputTokens()) : null,
-                StringUtils.hasText(response.outputTokens()) ? ResponsePath.parse(response.outputTokens()) : null);
+                optional(response.inputTokens()),
+                optional(response.outputTokens()),
+                optional(response.reasoningTokens()));
+    }
+
+    private static ResponsePath optional(String path) {
+        return StringUtils.hasText(path) ? ResponsePath.parse(path) : null;
     }
 
     /** {@code https://n8n.example.com/} and {@code webhook/triage} join with exactly one slash. */

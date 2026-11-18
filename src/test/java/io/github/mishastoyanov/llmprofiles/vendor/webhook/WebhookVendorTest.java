@@ -133,6 +133,14 @@ class WebhookVendorTest {
     }
 
     @Test
+    void thinkingTheWorkflowReportsIsReadFromItsPath() {
+        answer = "{\"output\": \"done\", \"usage\": {\"input\": 7, \"output\": 5, \"thinking\": 3}}";
+        runner.withPropertyValues("llm.profiles.triage.response.reasoning-tokens=$.usage.thinking").run(context ->
+                assertThat(context.getBean(LlmProfiles.class).profile("triage").call("x").usage())
+                        .isEqualTo(new LlmUsage(7L, 5L, 12L, 3L)));
+    }
+
+    @Test
     void usageTheWorkflowDoesNotReportIsUnknown() {
         answer = "{\"output\": \"done\"}";
         runner.run(context -> assertThat(context.getBean(LlmProfiles.class).profile("triage").call("x").usage())
